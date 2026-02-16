@@ -1,0 +1,16 @@
+{
+  "labels": [
+    "BAD",
+    "GOOD",
+    "HELLO",
+    "HELP",
+    "NAME",
+    "NO",
+    "PLEASE",
+    "SORRY",
+    "THANK_YOU",
+    "YES"
+  ],
+  "T": 24,
+  "num_classes": 10
+}
