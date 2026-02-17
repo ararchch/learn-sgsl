@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Script from 'next/script';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -105,7 +105,7 @@ function sanitizeNextPath(nextValue: string | null): string {
   return nextValue;
 }
 
-export default function OnboardingPage() {
+function OnboardingPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const {
@@ -438,6 +438,22 @@ export default function OnboardingPage() {
         </main>
       </div>
     </>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+          <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4 text-sm text-slate-500">
+            Loading onboarding...
+          </div>
+        </div>
+      }
+    >
+      <OnboardingPageContent />
+    </Suspense>
   );
 }
 

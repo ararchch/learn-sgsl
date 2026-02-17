@@ -871,7 +871,7 @@ function FinalTestContent({
   const [feedback, setFeedback] = useState('Record a clip to answer.');
   const completedRef = useRef(false);
 
-  function shuffle<T>(list: T[]) {
+  function shuffle<T>(list: readonly T[]): T[] {
     const arr = [...list];
     for (let i = arr.length - 1; i > 0; i -= 1) {
       const j = Math.floor(Math.random() * (i + 1));

@@ -62,7 +62,7 @@ export default function StaticLetterPractice({
   const onConfidentRef = useRef<Props['onConfidentPrediction']>(
     onConfidentPrediction,
   );
-  const handleResultsRef = useRef<(results: MPResults) => void>();
+  const handleResultsRef = useRef<((results: MPResults) => void) | null>(null);
 
   useEffect(() => {
     allowedLettersRef.current = allowedLetters;
@@ -159,12 +159,10 @@ export default function StaticLetterPractice({
     handleResultsRef.current = async (results: MPResults) => {
       drawHand(results);
 
-      const hasHand =
-        !!results.multiHandLandmarks &&
-        results.multiHandLandmarks.length > 0;
-      if (!hasHand) return;
+      const handLandmarks = results.multiHandLandmarks;
+      if (!handLandmarks?.length) return;
 
-      const hand = results.multiHandLandmarks[0];
+      const hand = handLandmarks[0];
 
       // mirror in data space
       const mirroredHand = hand.map((p) => ({
@@ -289,9 +287,7 @@ export default function StaticLetterPractice({
       minTrackingConfidence: 0.6,
     });
     hands.onResults((results: MPResults) => {
-      if (handleResultsRef.current) {
-        handleResultsRef.current(results);
-      }
+      handleResultsRef.current?.(results);
     });
     handsRef.current = hands;
 

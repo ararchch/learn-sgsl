@@ -1,12 +1,6 @@
 'use client';
 
-import { Space_Grotesk } from 'next/font/google';
 import { useState } from 'react';
-
-const spaceGrotesk = Space_Grotesk({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-});
 
 const signPresets = ['Down', 'Up', 'Left', 'Right', 'Hello', 'Thank You'];
 
@@ -31,7 +25,7 @@ export default function PlaygroundPage() {
 
   return (
     <div
-      className={`${spaceGrotesk.className} min-h-screen text-white`}
+      className="min-h-screen text-white"
       style={{
         background:
           'radial-gradient(circle at 12% 12%, rgba(124, 58, 237, 0.65), transparent 55%), radial-gradient(circle at 80% 20%, rgba(59, 130, 246, 0.35), transparent 60%), linear-gradient(180deg, #2d1b71 0%, #3a2da5 42%, #5645c8 100%)',
