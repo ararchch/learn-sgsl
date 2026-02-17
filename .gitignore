@@ -56,8 +56,6 @@ index.html
 index_old.html
 index_seq.html
 test.ipynb
-package.json
-package-lock.json
 frontend/package.json
 frontend/package-lock.json
 .vercel
