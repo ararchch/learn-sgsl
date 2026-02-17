@@ -828,6 +828,8 @@ function FinalTestView({
     'idle',
   );
   const [results, setResults] = useState<Result[]>([]);
+  const [showModuleTwoPrompt, setShowModuleTwoPrompt] = useState(false);
+  const router = useRouter();
 
   const holdStartRef = useRef<number | null>(null);
   const lastHitRef = useRef<number | null>(null);
@@ -896,6 +898,7 @@ function FinalTestView({
     if (!isCompleted && finalScore / letters.length >= 0.9) {
       onComplete();
       onUnlockModule(2);
+      setShowModuleTwoPrompt(true);
     }
   }, [
     testState,
@@ -945,6 +948,7 @@ function FinalTestView({
             <button
               type="button"
               onClick={() => {
+                setShowModuleTwoPrompt(false);
                 setTestState('running');
                 setTargetIndex(0);
                 setScore(0);
@@ -1050,6 +1054,7 @@ function FinalTestView({
             <button
               type="button"
               onClick={() => {
+                setShowModuleTwoPrompt(false);
                 setTargetIndex(0);
                 setScore(0);
                 setFinalScore(null);
@@ -1082,6 +1087,45 @@ function FinalTestView({
           </button>
         )}
       </div>
+
+      {showModuleTwoPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-md rounded-2xl border border-emerald-200 bg-white p-5 shadow-xl"
+          >
+            <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-600">
+              Module 1 complete
+            </p>
+            <h3 className="mt-2 text-lg font-semibold text-slate-900">
+              Great work. Proceed to Module 2.
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              You have unlocked Module 2: Fingerspelling.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowModuleTwoPrompt(false);
+                  router.push('/module-2');
+                }}
+                className="inline-flex items-center rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-400"
+              >
+                Go to Module 2
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowModuleTwoPrompt(false)}
+                className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-800"
+              >
+                Stay here
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

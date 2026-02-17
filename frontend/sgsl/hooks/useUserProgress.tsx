@@ -32,6 +32,7 @@ type UserProgressContextValue = {
   completeOnboardingStep: (stepId: OnboardingStepId) => Promise<void>;
   completeOnboarding: (durationMs: number) => Promise<void>;
   resetOnboarding: () => Promise<void>;
+  logout: () => void;
 };
 
 const UserProgressContext = createContext<UserProgressContextValue | null>(null);
@@ -214,6 +215,15 @@ export function UserProgressProvider({
     await updateOnboardingState({ action: 'reset', throwOnError: true });
   }, [updateOnboardingState]);
 
+  const logout = useCallback(() => {
+    if (typeof document !== 'undefined') {
+      document.cookie =
+        'sgsl_user=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    }
+    setProfile(null);
+    setLoading(false);
+  }, []);
+
   const value = useMemo(
     () => ({
       profile,
@@ -225,6 +235,7 @@ export function UserProgressProvider({
       completeOnboardingStep,
       completeOnboarding,
       resetOnboarding,
+      logout,
     }),
     [
       profile,
@@ -236,6 +247,7 @@ export function UserProgressProvider({
       completeOnboardingStep,
       completeOnboarding,
       resetOnboarding,
+      logout,
     ],
   );
 

@@ -25,7 +25,23 @@ type UserUpdate = Partial<Omit<UserProfile, 'username'>> & {
 
 type OnboardingUpdate = Partial<OnboardingProfileFields>;
 
-const DATA_PATH = path.join(process.cwd(), 'data', 'users.json');
+function resolveDataPath(): string {
+  const configuredPath = process.env.USERS_DATA_PATH?.trim();
+  if (configuredPath) {
+    return path.isAbsolute(configuredPath)
+      ? configuredPath
+      : path.join(process.cwd(), configuredPath);
+  }
+
+  if (process.env.VERCEL) {
+    // Vercel serverless functions can only write to /tmp.
+    return path.join('/tmp', 'sgsl', 'users.json');
+  }
+
+  return path.join(process.cwd(), 'data', 'users.json');
+}
+
+const DATA_PATH = resolveDataPath();
 
 async function ensureDataFile() {
   await fs.mkdir(path.dirname(DATA_PATH), { recursive: true });

@@ -95,30 +95,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <nav className="w-full border-b border-slate-200 bg-white">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
-          <div className="text-sm font-semibold tracking-wide">SgSL Learn</div>
-          {profile && (
-            <div className="flex items-center gap-4 text-xs text-slate-600">
-              <span>🔥 {profile.streak} streak</span>
-              <span>⚡ {profile.xp} XP</span>
-              <span>👤 {profile.username}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  document.cookie =
-                    'sgsl_user=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-                  router.push('/login');
-                }}
-                className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-500 hover:border-slate-300 hover:text-slate-700"
-              >
-                Log out
-              </button>
-            </div>
-          )}
-        </div>
-      </nav>
-
       <main className="mx-auto w-full max-w-6xl px-6 py-8">
         {loading ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">

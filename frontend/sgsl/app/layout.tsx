@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { UserProgressProvider } from '@/hooks/useUserProgress';
+import GlobalTopBar from '@/components/GlobalTopBar';
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -15,7 +16,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <UserProgressProvider>{children}</UserProgressProvider>
+        <UserProgressProvider>
+          <GlobalTopBar />
+          {children}
+        </UserProgressProvider>
       </body>
     </html>
   );
