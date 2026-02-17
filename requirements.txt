@@ -1,0 +1,11 @@
+fastapi>=0.110
+uvicorn[standard]>=0.27
+numpy>=1.24
+pillow>=10.0
+joblib>=1.3
+scikit-learn>=1.3
+python-multipart>=0.0.9
+
+# Temporal + dynamic inference
+torch>=2.1
+opencv-python-headless>=4.9

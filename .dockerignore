@@ -1,0 +1,25 @@
+.git
+.github
+.vercel
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+node_modules/
+frontend/
+
+# Not needed to run the API
+data/
+dynamic/
+*.ipynb
+A.mp4
+infer
+index*.html
+
+# Keep only the dynamic inference assets we need.
+WLASL/*
+!WLASL/wlasl_model_test/
+!WLASL/wlasl_model_test/**
