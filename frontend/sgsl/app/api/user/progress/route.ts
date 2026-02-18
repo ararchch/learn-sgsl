@@ -12,6 +12,9 @@ export async function POST(request: Request) {
           Number.isFinite(value),
         )
       : [];
+    const requestedModule1TourVersion = Number(
+      body?.module1LessonTourVersionCompleted,
+    );
 
     if (!username) {
       return NextResponse.json(
@@ -29,6 +32,7 @@ export async function POST(request: Request) {
       xp?: number;
       completedLessons?: string[];
       unlockedModules?: number[];
+      module1LessonTourVersionCompleted?: number;
     } = {};
 
     if (nextXp !== existing.xp) {
@@ -43,6 +47,19 @@ export async function POST(request: Request) {
     }
     if (unlockedModules.length > 0) {
       updates.unlockedModules = unlockedModules;
+    }
+    if (Number.isFinite(requestedModule1TourVersion)) {
+      const normalizedRequestedTourVersion = Math.max(
+        0,
+        Math.floor(requestedModule1TourVersion),
+      );
+      if (
+        normalizedRequestedTourVersion >
+        (existing.module1LessonTourVersionCompleted ?? 0)
+      ) {
+        updates.module1LessonTourVersionCompleted =
+          normalizedRequestedTourVersion;
+      }
     }
 
     const profile = await updateProgress(username, updates);

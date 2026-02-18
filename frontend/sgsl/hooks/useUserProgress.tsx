@@ -12,6 +12,7 @@ import type {
   OnboardingProfileFields,
   OnboardingStepId,
 } from '@/lib/onboarding';
+import { MODULE1_LESSON_TOUR_VERSION } from '@/lib/module1Tour';
 
 export type UserProfile = {
   username: string;
@@ -20,6 +21,7 @@ export type UserProfile = {
   lastLogin: string;
   completedLessons: string[];
   unlockedModules: number[];
+  module1LessonTourVersionCompleted: number;
 } & OnboardingProfileFields;
 
 type UserProgressContextValue = {
@@ -31,6 +33,7 @@ type UserProgressContextValue = {
   startOnboarding: () => Promise<void>;
   completeOnboardingStep: (stepId: OnboardingStepId) => Promise<void>;
   completeOnboarding: (durationMs: number) => Promise<void>;
+  completeModule1LessonTour: (version?: number) => Promise<void>;
   resetOnboarding: () => Promise<void>;
   logout: () => void;
 };
@@ -211,6 +214,44 @@ export function UserProgressProvider({
     [updateOnboardingState],
   );
 
+  const completeModule1LessonTour = useCallback(
+    async (version: number = MODULE1_LESSON_TOUR_VERSION) => {
+      if (!profile?.username) return;
+      if (!Number.isFinite(version)) return;
+      const normalizedVersion = Math.max(0, Math.floor(version));
+      if (
+        (profile.module1LessonTourVersionCompleted ?? 0) >=
+        normalizedVersion
+      ) {
+        return;
+      }
+
+      const optimistic: UserProfile = {
+        ...profile,
+        module1LessonTourVersionCompleted: normalizedVersion,
+      };
+      setProfile(optimistic);
+
+      try {
+        const response = await fetch('/api/user/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: profile.username,
+            module1LessonTourVersionCompleted: normalizedVersion,
+          }),
+        });
+        if (response.ok) {
+          const data = (await response.json()) as UserProfile;
+          setProfile(data);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    [profile],
+  );
+
   const resetOnboarding = useCallback(async () => {
     await updateOnboardingState({ action: 'reset', throwOnError: true });
   }, [updateOnboardingState]);
@@ -234,6 +275,7 @@ export function UserProgressProvider({
       startOnboarding,
       completeOnboardingStep,
       completeOnboarding,
+      completeModule1LessonTour,
       resetOnboarding,
       logout,
     }),
@@ -246,6 +288,7 @@ export function UserProgressProvider({
       startOnboarding,
       completeOnboardingStep,
       completeOnboarding,
+      completeModule1LessonTour,
       resetOnboarding,
       logout,
     ],

@@ -15,6 +15,7 @@ type UserProfile = {
   lastLogin: string;
   completedLessons: string[];
   unlockedModules: number[];
+  module1LessonTourVersionCompleted: number;
 } & OnboardingProfileFields;
 
 type UserUpdate = Partial<Omit<UserProfile, 'username'>> & {
@@ -151,6 +152,11 @@ function normalizeUser(raw: unknown): UserProfile | null {
   const onboardingStepsCompleted = normalizeOnboardingSteps(
     user.onboardingStepsCompleted,
   );
+  const module1LessonTourVersionCompleted = Number.isFinite(
+    Number(user.module1LessonTourVersionCompleted),
+  )
+    ? Math.max(0, Math.floor(Number(user.module1LessonTourVersionCompleted)))
+    : 0;
 
   return {
     username,
@@ -164,6 +170,7 @@ function normalizeUser(raw: unknown): UserProfile | null {
     onboardingCompletedAt,
     onboardingDurationMs,
     onboardingStepsCompleted,
+    module1LessonTourVersionCompleted,
   };
 }
 
@@ -205,6 +212,7 @@ export async function createUser(username: string): Promise<UserProfile> {
     lastLogin: now,
     completedLessons: [],
     unlockedModules: [1],
+    module1LessonTourVersionCompleted: 0,
     ...DEFAULT_ONBOARDING_FIELDS,
   };
   users.push(profile);

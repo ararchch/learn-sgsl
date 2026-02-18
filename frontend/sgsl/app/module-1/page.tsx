@@ -7,14 +7,31 @@ import StaticLetterPractice from '@/components/StaticLetterPractice';
 import ModuleNav from '@/components/ModuleNav';
 import IntroLessonView from '@/components/IntroLessonView';
 import { useUserProgress } from '@/hooks/useUserProgress';
+import { MODULE1_LESSON_TOUR_VERSION } from '@/lib/module1Tour';
 import { hasCompletedOnboarding } from '@/lib/onboarding';
 import {
   MODULE_ONE_LESSONS,
-  MODULE_ONE_LETTERS,
   LessonConfig,
 } from './LessonConfig';
 
 type LessonStatus = 'idle' | 'detecting' | 'holding' | 'success' | 'failed';
+const INTERACTIVE_LESSON_TOUR_STEPS = [
+  {
+    title: 'Letter strip',
+    message:
+      'Tap each letter here to learn it. You need to visit all letters in this row to complete this lesson.',
+  },
+  {
+    title: 'Guide mode',
+    message:
+      'Switch between Video and Image to see the sign in motion or as a static handshape.',
+  },
+  {
+    title: 'Orientation',
+    message:
+      'Use Normal and Mirrored to flip the guide so it matches how you prefer to copy signs.',
+  },
+] as const;
 
 export default function ModuleOnePage() {
   return (
@@ -29,7 +46,13 @@ function Module1Container() {
   const router = useRouter();
   const lessons = MODULE_ONE_LESSONS;
   const [currentLessonId, setCurrentLessonId] = useState<string>(lessons[0].id);
-  const { profile, loading, completeLesson, unlockModule } = useUserProgress();
+  const {
+    profile,
+    loading,
+    completeLesson,
+    unlockModule,
+    completeModule1LessonTour,
+  } = useUserProgress();
   const completedLessons = profile?.completedLessons ?? [];
 
   const currentLesson =
@@ -197,6 +220,12 @@ function Module1Container() {
                   lesson={currentLesson}
                   isCompleted={isCompleted}
                   onComplete={markLessonComplete}
+                  tourVersionCompleted={
+                    loading || !profile
+                      ? null
+                      : profile.module1LessonTourVersionCompleted
+                  }
+                  onCompleteLessonTour={completeModule1LessonTour}
                 />
               )}
 
@@ -252,10 +281,14 @@ function InteractiveLessonView({
   lesson,
   isCompleted,
   onComplete,
+  tourVersionCompleted,
+  onCompleteLessonTour,
 }: {
   lesson: LessonConfig;
   isCompleted: boolean;
   onComplete: () => void;
+  tourVersionCompleted: number | null;
+  onCompleteLessonTour: (version?: number) => Promise<void>;
 }) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [view, setView] = useState<'video' | 'image'>('image');
@@ -268,11 +301,17 @@ function InteractiveLessonView({
   const [visitedLetters, setVisitedLetters] = useState<Set<string>>(
     () => new Set([lesson.letters[0]]),
   );
+  const [tourOpen, setTourOpen] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
+  const [tourDismissedThisMount, setTourDismissedThisMount] = useState(false);
 
   const holdStartRef = useRef<number | null>(null);
   const lastHitRef = useRef<number | null>(null);
   const completedRef = useRef(false);
   const guideVideoRef = useRef<HTMLVideoElement | null>(null);
+  const letterStripRef = useRef<HTMLDivElement | null>(null);
+  const guideModeToggleRef = useRef<HTMLDivElement | null>(null);
+  const guideOrientationToggleRef = useRef<HTMLDivElement | null>(null);
 
   const holdMs = 2000;
   const targetLetter = lesson.letters[currentIdx];
@@ -285,6 +324,22 @@ function InteractiveLessonView({
       : status === 'success'
         ? `“${targetLetter}” confirmed. Move to the next letter when ready.`
         : `Recognition only works when your hand clearly matches “${targetLetter}” and stays steady for about 2 seconds.`;
+  const autoOpenTour =
+    tourVersionCompleted != null &&
+    tourVersionCompleted < MODULE1_LESSON_TOUR_VERSION &&
+    !tourDismissedThisMount;
+  const isTourVisible = tourOpen || autoOpenTour;
+  const tourLastStep = INTERACTIVE_LESSON_TOUR_STEPS.length - 1;
+  const currentTourStep =
+    INTERACTIVE_LESSON_TOUR_STEPS[tourStep] ??
+    INTERACTIVE_LESSON_TOUR_STEPS[INTERACTIVE_LESSON_TOUR_STEPS.length - 1];
+  const isLetterTourStep = isTourVisible && tourStep === 0;
+  const isGuideModeTourStep = isTourVisible && tourStep === 1;
+  const isGuideOrientationTourStep = isTourVisible && tourStep === 2;
+  const tourCardHighlightClass =
+    'ring-4 ring-amber-400 ring-offset-4 ring-offset-slate-50 border-amber-300 bg-amber-50 shadow-lg shadow-amber-300/60 animate-pulse';
+  const tourControlHighlightClass =
+    'ring-4 ring-amber-400 ring-offset-2 ring-offset-white border-amber-300 bg-amber-100 shadow-md shadow-amber-300/60 animate-pulse';
 
   useEffect(() => {
     setCurrentIdx(0);
@@ -296,6 +351,9 @@ function InteractiveLessonView({
     holdStartRef.current = null;
     lastHitRef.current = null;
     completedRef.current = false;
+    setTourOpen(false);
+    setTourStep(0);
+    setTourDismissedThisMount(false);
   }, [lesson.id, lesson.letters]);
 
   useEffect(() => {
@@ -362,6 +420,21 @@ function InteractiveLessonView({
     guideVideo.pause();
   }, [view, guideSpeed, guidePlaying, targetLetter]);
 
+  useEffect(() => {
+    if (!isTourVisible) return;
+    const targetRefs = [
+      letterStripRef.current,
+      guideModeToggleRef.current,
+      guideOrientationToggleRef.current,
+    ];
+    const target = targetRefs[tourStep];
+    target?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+      inline: 'nearest',
+    });
+  }, [isTourVisible, tourStep]);
+
   function handlePrediction(letter: string) {
     if (letter !== targetLetter) return;
     const now = Date.now();
@@ -374,11 +447,31 @@ function InteractiveLessonView({
     }
   }
 
+  async function dismissTour() {
+    setTourOpen(false);
+    setTourDismissedThisMount(true);
+    try {
+      await onCompleteLessonTour(MODULE1_LESSON_TOUR_VERSION);
+    } catch (error) {
+      console.error('Module 1 lesson tour completion failed', error);
+    }
+  }
+
+  function handleReplayTour() {
+    setTourStep(0);
+    setTourOpen(true);
+  }
+
   return (
     <div className="grid gap-6">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
+      <div
+        ref={letterStripRef}
+        className={`rounded-2xl border border-slate-200 bg-white p-4 md:p-5 ${
+          isLetterTourStep ? tourCardHighlightClass : ''
+        }`}
+      >
         <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-          Go through all letters to finish lesson
+          Tap every letter in this row to complete this lesson
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           {lesson.letters.map((letter, idx) => {
@@ -427,7 +520,12 @@ function InteractiveLessonView({
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold">Guide</h3>
-                <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-[11px]">
+                <div
+                  ref={guideModeToggleRef}
+                  className={`inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-[11px] ${
+                    isGuideModeTourStep ? tourControlHighlightClass : ''
+                  }`}
+                >
                   <button
                     type="button"
                     onClick={() => setView('video')}
@@ -452,8 +550,17 @@ function InteractiveLessonView({
                   </button>
                 </div>
               </div>
+              <p className="text-[11px] text-slate-500">
+                Use Video or Image to learn each sign, then use Normal or Mirrored
+                to flip the guide orientation.
+              </p>
 
-              <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-[11px]">
+              <div
+                ref={guideOrientationToggleRef}
+                className={`inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-[11px] ${
+                  isGuideOrientationTourStep ? tourControlHighlightClass : ''
+                }`}
+              >
                 <button
                   type="button"
                   onClick={() => setGuideOrientation('normal')}
@@ -534,9 +641,18 @@ function InteractiveLessonView({
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5 text-xs text-slate-600 space-y-2">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-              Instructions and feedback
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                Instructions and feedback
+              </p>
+              <button
+                type="button"
+                onClick={handleReplayTour}
+                className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-800"
+              >
+                How to use
+              </button>
+            </div>
             <p>1. Match the guide handshape for the target letter.</p>
             <p>2. Keep your hand steady so confidence stays high.</p>
             <p>3. Recognition only works when your handshape is clear and stable.</p>
@@ -551,6 +667,63 @@ function InteractiveLessonView({
           </div>
         </aside>
       </div>
+
+      {isTourVisible && (
+        <div className="pointer-events-none fixed inset-x-4 bottom-4 z-40 flex justify-center">
+          <div className="pointer-events-auto w-full max-w-md rounded-2xl border border-blue-200 bg-white p-4 shadow-xl">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-blue-600">
+              How to use · Step {tourStep + 1}/{INTERACTIVE_LESSON_TOUR_STEPS.length}
+            </p>
+            <p className="mt-2 text-sm font-semibold text-slate-900">
+              {currentTourStep.title}
+            </p>
+            <p className="mt-1 text-xs text-slate-600">
+              {currentTourStep.message}
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  void dismissTour();
+                }}
+                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-800"
+              >
+                Skip
+              </button>
+              {tourStep > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTourStep((prev) => Math.max(0, prev - 1))}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-800"
+                >
+                  Back
+                </button>
+              )}
+              {tourStep < tourLastStep ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTourStep((prev) => Math.min(tourLastStep, prev + 1))
+                  }
+                  className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-500"
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void dismissTour();
+                  }}
+                  className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-500"
+                >
+                  Done
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
