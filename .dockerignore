@@ -19,7 +19,4 @@ A.mp4
 infer
 index*.html
 
-# Keep only the dynamic inference assets we need.
-WLASL/*
-!WLASL/wlasl_model_test/
-!WLASL/wlasl_model_test/**
+WLASL/

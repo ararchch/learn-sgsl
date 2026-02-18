@@ -1,3 +1,0 @@
-# WLASL/.gitignore ignores all *.pt, but we need this runtime weight file
-# for the deployed backend (/predict_dynamic).
-!nslt_100.pt

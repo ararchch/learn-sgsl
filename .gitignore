@@ -43,10 +43,7 @@ data/
 dynamic/frames/
 dynamic/features/
 *.npz
-# Ignore the bulk of WLASL, but keep the runtime assets needed by /predict_dynamic
-WLASL/*
-!WLASL/wlasl_model_test/
-!WLASL/wlasl_model_test/**
+WLASL/
 
 # Embedded git repositories
 WLASL/.git/
