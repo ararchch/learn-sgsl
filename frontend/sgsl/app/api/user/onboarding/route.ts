@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getUser, updateOnboarding } from '@/lib/db';
+import { createUser, getUser, updateOnboarding } from '@/lib/db';
 import {
   ONBOARDING_STEP_IDS,
   ONBOARDING_VERSION,
@@ -29,13 +29,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const existing = await getUser(username);
-    if (!existing) {
-      return NextResponse.json(
-        { error: 'User not found.' },
-        { status: 404 },
-      );
-    }
+    const existing = (await getUser(username)) ?? (await createUser(username));
 
     const now = new Date().toISOString();
 

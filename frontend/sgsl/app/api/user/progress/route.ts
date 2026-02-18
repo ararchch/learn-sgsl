@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getUser, updateProgress } from '@/lib/db';
+import { createUser, getUser, updateProgress } from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
@@ -20,13 +20,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const existing = await getUser(username);
-    if (!existing) {
-      return NextResponse.json(
-        { error: 'User not found.' },
-        { status: 404 },
-      );
-    }
+    const existing = (await getUser(username)) ?? (await createUser(username));
 
     const nextXp =
       Number.isFinite(xp) && xp !== 0 ? existing.xp + xp : existing.xp;
