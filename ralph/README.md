@@ -7,7 +7,7 @@ The loop is designed to:
 - execute exactly one PRD checkbox per iteration,
 - run project gates after each change,
 - append a structured progress entry,
-- create a git commit if the iteration changed files.
+- create a git commit on the repo `ralph` branch if the iteration changed files.
 
 ## Quick Start
 
@@ -32,6 +32,7 @@ chmod +x ralph/gates.sh ralph/ralph-loop.sh
 - Prefer page/component-local tasks before shared refactors.
 - Keep `progress.md` append-only so iteration history remains auditable.
 - Start the loop from a clean git working tree. The loop commits after each iteration and assumes it is not mixing in unrelated local edits.
+- The loop commits on the local `ralph` branch and will switch to that branch at startup (from a clean tree) if needed.
 
 ## How the Loop Works
 
@@ -43,7 +44,7 @@ For each iteration, `ralph-loop.sh`:
    - `ralph/constraints.md`
 3. Instructs Codex to complete exactly one checkbox and run `ralph/gates.sh` until green.
 4. Verifies exactly one checkbox was checked for successful iterations, or exits gracefully if the iteration is explicitly logged as `blocked`/`failed` with no checkbox checked.
-5. Commits the result if files changed.
+5. Commits the result on the `ralph` branch if files changed.
 
 ## Authoring PRDs
 

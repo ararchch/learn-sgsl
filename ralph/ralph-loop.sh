@@ -10,6 +10,7 @@ PRD_FILE="$RALPH_DIR/prd.md"
 PROGRESS_FILE="$RALPH_DIR/progress.md"
 CONSTRAINTS_FILE="$RALPH_DIR/constraints.md"
 GATES_SCRIPT="$RALPH_DIR/gates.sh"
+COMMIT_BRANCH="ralph"
 
 MAX_ITERS="${1:-10}"
 
@@ -174,12 +175,45 @@ ensure_clean_worktree() {
   fi
 }
 
+current_git_branch() {
+  git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD
+}
+
+ensure_commit_branch_checked_out() {
+  local current_branch
+  current_branch="$(current_git_branch)"
+
+  if [ "$current_branch" = "$COMMIT_BRANCH" ]; then
+    return 0
+  fi
+
+  if ! git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$COMMIT_BRANCH"; then
+    die "Required commit branch '$COMMIT_BRANCH' does not exist. Create it first, then rerun."
+  fi
+
+  if [ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]; then
+    die "Cannot switch to '$COMMIT_BRANCH' with a dirty working tree."
+  fi
+
+  log "Switching from branch '${current_branch}' to '${COMMIT_BRANCH}' for Ralph loop commits."
+  git -C "$REPO_ROOT" checkout "$COMMIT_BRANCH" >/dev/null
+}
+
+assert_on_commit_branch() {
+  local current_branch
+  current_branch="$(current_git_branch)"
+  if [ "$current_branch" != "$COMMIT_BRANCH" ]; then
+    die "Expected to commit on branch '$COMMIT_BRANCH', but current branch is '$current_branch'."
+  fi
+}
+
 commit_if_needed() {
   local iter="$1"
+  assert_on_commit_branch
   if [ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]; then
     git -C "$REPO_ROOT" add -A
     if git -C "$REPO_ROOT" commit -m "ralph: iteration ${iter}"; then
-      log "Created commit for iteration ${iter}."
+      log "Created commit for iteration ${iter} on branch '${COMMIT_BRANCH}'."
     else
       log "git commit returned non-zero for iteration ${iter}."
       return 1
@@ -234,6 +268,7 @@ Hard rules:
 - If a dependency is truly needed, document why in the progress entry.
 - Do not run destructive commands (no resets, no directory wipes, no removing unrelated files).
 - Do not create a git commit; the loop runner will handle commits.
+- Do not switch git branches; the loop runner commits on the repository's "$COMMIT_BRANCH" branch.
 
 If you are blocked:
 - Leave the PRD checkbox unchecked.
@@ -320,8 +355,10 @@ main() {
   ensure_required_files
   cd "$REPO_ROOT"
   ensure_clean_worktree
+  ensure_commit_branch_checked_out
 
   log "Repo root: $REPO_ROOT"
+  log "Commit branch: $COMMIT_BRANCH"
   log "Max iterations: $MAX_ITERS"
 
   local iter
