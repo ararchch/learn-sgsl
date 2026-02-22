@@ -42,3 +42,16 @@ Append-only. Add a new entry at the end for each loop iteration. Do not edit or 
   - `ralph/gates.sh`: pass
 - Notes/Risks:
   - Hooks are non-visual and prepare later overlay/highlight work; overlay rendering/positioning behavior is still pending.
+
+## Iteration 3 - 2026-02-22 05:59:36 UTC
+- Status: done
+- PRD item: Add a reusable page-dimming overlay for the Module 1 teaching tutorial that visually greys out the page while the tutorial is active.
+- Summary: Added a reusable non-interactive `TutorialPageDimmingOverlay` component in the onboarding page and rendered it as a fixed full-viewport dimming layer during the tutorial flow.
+- Files changed:
+  - frontend/sgsl/app/onboarding/page.tsx
+  - ralph/prd.md
+  - ralph/progress.md
+- Gates:
+  - `ralph/gates.sh`: pass
+- Notes/Risks:
+  - The overlay currently dims the full page uniformly; target carve-out highlighting and tutorial box layering/anchoring remain pending in later PRD items.

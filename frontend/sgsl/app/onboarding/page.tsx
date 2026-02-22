@@ -277,6 +277,7 @@ function OnboardingPageContent() {
       />
 
       <div className="min-h-screen bg-slate-50 text-slate-900">
+        <TutorialPageDimmingOverlay active />
         <header
           className="border-b border-slate-200 bg-white"
           data-onboarding-tutorial-target={ONBOARDING_TUTORIAL_TARGETS.pageHeader}
@@ -492,6 +493,17 @@ function OnboardingPageContent() {
         </main>
       </div>
     </>
+  );
+}
+
+function TutorialPageDimmingOverlay({ active }: { active: boolean }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={`pointer-events-none fixed inset-0 z-30 bg-slate-900/35 transition-opacity duration-200 ${
+        active ? 'opacity-100' : 'opacity-0'
+      }`}
+    />
   );
 }
 
