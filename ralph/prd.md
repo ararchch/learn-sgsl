@@ -10,7 +10,7 @@ This PRD is intentionally split into small, verifiable checklist items so the Ra
 
 All items below are blocked until the prerequisite checkbox above is complete.
 
-- [ ] Identify the current Module 1 teaching tutorial step targets in `frontend/sgsl/app/onboarding/page.tsx` and introduce stable target hooks (refs and/or `data-*` attributes) needed for overlay highlighting without changing tutorial content.
+- [x] Identify the current Module 1 teaching tutorial step targets in `frontend/sgsl/app/onboarding/page.tsx` and introduce stable target hooks (refs and/or `data-*` attributes) needed for overlay highlighting without changing tutorial content.
 - [ ] Add a reusable page-dimming overlay for the Module 1 teaching tutorial that visually greys out the page while the tutorial is active.
 - [ ] Ensure the active tutorial target region remains visually highlighted (not greyed out) while the overlay is active for each step that references a page section.
 - [ ] Ensure the tutorial box itself remains fully visible and layered above the dimmed overlay.

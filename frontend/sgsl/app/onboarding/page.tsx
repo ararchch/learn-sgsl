@@ -70,6 +70,30 @@ const FRAMING_ZONE = {
   maxY: 0.84,
 } as const;
 
+// Stable hooks for future onboarding tutorial overlay/highlight targeting.
+const ONBOARDING_TUTORIAL_TARGETS = {
+  pageHeader: 'onboarding-header',
+  stepsNav: 'onboarding-steps-nav',
+  stepNavItemPrefix: 'onboarding-step-nav-',
+  activeStepPanel: 'onboarding-active-step-panel',
+  welcomePanel: 'onboarding-step-welcome',
+  welcomeStartButton: 'onboarding-step-welcome-start',
+  cameraCheckPanel: 'onboarding-step-camera-check',
+  cameraCheckCameraCard: 'onboarding-camera-check-card',
+  cameraCheckCaptureZone: 'onboarding-camera-check-capture-zone',
+  cameraCheckContinueButton: 'onboarding-camera-check-continue',
+  holdCheckPanel: 'onboarding-step-hold-check',
+  holdCheckPracticeCard: 'onboarding-hold-check-practice',
+  holdCheckGuideCard: 'onboarding-hold-check-guide',
+  holdCheckProgressCard: 'onboarding-hold-check-progress',
+  fingerspellingCheckPanel: 'onboarding-step-fingerspelling-check',
+  fingerspellingCheckPracticeCard: 'onboarding-fingerspelling-check-practice',
+  modulePreviewsPanel: 'onboarding-step-module-previews',
+  modulePreviewGrid: 'onboarding-module-preview-grid',
+  modulePreviewCardPrefix: 'onboarding-module-preview-',
+  modulePreviewsFinishButton: 'onboarding-module-previews-finish',
+} as const;
+
 function getHandBounds(landmarks: number[] | null) {
   if (!landmarks || landmarks.length < 63) return null;
   let minX = 1;
@@ -253,7 +277,10 @@ function OnboardingPageContent() {
       />
 
       <div className="min-h-screen bg-slate-50 text-slate-900">
-        <header className="border-b border-slate-200 bg-white">
+        <header
+          className="border-b border-slate-200 bg-white"
+          data-onboarding-tutorial-target={ONBOARDING_TUTORIAL_TARGETS.pageHeader}
+        >
           <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
             <div>
               <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
@@ -275,7 +302,10 @@ function OnboardingPageContent() {
         </header>
 
         <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 md:grid-cols-[260px_minmax(0,1fr)] md:px-6">
-          <aside className="rounded-2xl border border-slate-200 bg-white p-4">
+          <aside
+            className="rounded-2xl border border-slate-200 bg-white p-4"
+            data-onboarding-tutorial-target={ONBOARDING_TUTORIAL_TARGETS.stepsNav}
+          >
             <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
               Steps
             </p>
@@ -293,6 +323,7 @@ function OnboardingPageContent() {
                       setRequestedStep(step.id);
                     }}
                     disabled={!canOpen}
+                    data-onboarding-tutorial-target={`${ONBOARDING_TUTORIAL_TARGETS.stepNavItemPrefix}${step.id}`}
                     className={`h-[126px] w-full rounded-xl border px-3 py-2 text-left ${
                       active
                         ? 'border-blue-300 bg-blue-50'
@@ -320,9 +351,15 @@ function OnboardingPageContent() {
             </div>
           </aside>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
+          <section
+            className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5"
+            data-onboarding-tutorial-target={ONBOARDING_TUTORIAL_TARGETS.activeStepPanel}
+          >
             {currentStep === 'welcome' && (
-              <div className="space-y-4">
+              <div
+                className="space-y-4"
+                data-onboarding-tutorial-target={ONBOARDING_TUTORIAL_TARGETS.welcomePanel}
+              >
                 <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
                   Step 1
                 </p>
@@ -346,6 +383,9 @@ function OnboardingPageContent() {
                   type="button"
                   onClick={handleStartSetup}
                   disabled={savingStep === 'welcome'}
+                  data-onboarding-tutorial-target={
+                    ONBOARDING_TUTORIAL_TARGETS.welcomeStartButton
+                  }
                   className="inline-flex items-center rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {savingStep === 'welcome' ? 'Starting...' : 'Start setup'}
@@ -381,7 +421,12 @@ function OnboardingPageContent() {
             )}
 
             {currentStep === 'module-previews' && (
-              <div className="space-y-4">
+              <div
+                className="space-y-4"
+                data-onboarding-tutorial-target={
+                  ONBOARDING_TUTORIAL_TARGETS.modulePreviewsPanel
+                }
+              >
                 <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
                   Step 5
                 </p>
@@ -393,11 +438,17 @@ function OnboardingPageContent() {
                   in mind as you begin Module 1.
                 </p>
 
-                <div className="grid gap-3 md:grid-cols-2">
+                <div
+                  className="grid gap-3 md:grid-cols-2"
+                  data-onboarding-tutorial-target={
+                    ONBOARDING_TUTORIAL_TARGETS.modulePreviewGrid
+                  }
+                >
                   {MODULE_PREVIEWS.map((preview) => {
                     return (
                       <div
                         key={preview.id}
+                        data-onboarding-tutorial-target={`${ONBOARDING_TUTORIAL_TARGETS.modulePreviewCardPrefix}${preview.id}`}
                         className="h-full rounded-xl border border-slate-200 bg-white p-3 text-left"
                       >
                         <p className="text-xs font-semibold text-slate-900">
@@ -419,6 +470,9 @@ function OnboardingPageContent() {
                     type="button"
                     onClick={handleFinish}
                     disabled={finishing}
+                    data-onboarding-tutorial-target={
+                      ONBOARDING_TUTORIAL_TARGETS.modulePreviewsFinishButton
+                    }
                     className="inline-flex items-center rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {finishing
@@ -538,7 +592,10 @@ function CameraCalibrationCheck({
     !!error && /notallowed|permission|denied|access/i.test(error);
 
   return (
-    <div className="space-y-4">
+    <div
+      className="space-y-4"
+      data-onboarding-tutorial-target={ONBOARDING_TUTORIAL_TARGETS.cameraCheckPanel}
+    >
       <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
         Step 2
       </p>
@@ -552,8 +609,18 @@ function CameraCalibrationCheck({
         Follow the instructions and keep your hand in the dashed zone for 2 seconds to pass this check. Please ensure to turn on your webcam and provide the site with the necessary permissions.
       </p>
 
-      <div className="relative rounded-2xl border border-slate-200 bg-white p-3">
-        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-slate-100">
+      <div
+        className="relative rounded-2xl border border-slate-200 bg-white p-3"
+        data-onboarding-tutorial-target={
+          ONBOARDING_TUTORIAL_TARGETS.cameraCheckCameraCard
+        }
+      >
+        <div
+          className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-slate-100"
+          data-onboarding-tutorial-target={
+            ONBOARDING_TUTORIAL_TARGETS.cameraCheckCaptureZone
+          }
+        >
           <video
             ref={videoRef}
             autoPlay
@@ -602,6 +669,9 @@ function CameraCalibrationCheck({
         type="button"
         onClick={onPassed}
         disabled={!canContinue || pending}
+        data-onboarding-tutorial-target={
+          ONBOARDING_TUTORIAL_TARGETS.cameraCheckContinueButton
+        }
         className="inline-flex items-center rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-70"
       >
         {pending ? 'Saving progress...' : 'Continue to hold check'}
@@ -651,7 +721,10 @@ function HoldMechanicCheck({
   }, [onPassed]);
 
   return (
-    <div className="space-y-4">
+    <div
+      className="space-y-4"
+      data-onboarding-tutorial-target={ONBOARDING_TUTORIAL_TARGETS.holdCheckPanel}
+    >
       <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
         Step 3
       </p>
@@ -666,7 +739,12 @@ function HoldMechanicCheck({
       </p>
 
       <div className="grid items-stretch gap-4 lg:grid-cols-2">
-        <div className="h-full rounded-2xl border border-slate-200 bg-white p-4">
+        <div
+          className="h-full rounded-2xl border border-slate-200 bg-white p-4"
+          data-onboarding-tutorial-target={
+            ONBOARDING_TUTORIAL_TARGETS.holdCheckPracticeCard
+          }
+        >
           <StaticLetterPractice
             key="onboarding-hold-l"
             targetLetter="L"
@@ -675,7 +753,10 @@ function HoldMechanicCheck({
             onConfidentPrediction={handlePrediction}
           />
         </div>
-        <div className="h-full rounded-2xl border border-slate-200 bg-white p-4">
+        <div
+          className="h-full rounded-2xl border border-slate-200 bg-white p-4"
+          data-onboarding-tutorial-target={ONBOARDING_TUTORIAL_TARGETS.holdCheckGuideCard}
+        >
           <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
             Letter guide
           </p>
@@ -695,7 +776,10 @@ function HoldMechanicCheck({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-3">
+      <div
+        className="rounded-2xl border border-slate-200 bg-white p-3"
+        data-onboarding-tutorial-target={ONBOARDING_TUTORIAL_TARGETS.holdCheckProgressCard}
+      >
         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200">
           <div
             className="h-full rounded-full bg-emerald-500 transition-[width] duration-75"
@@ -725,7 +809,12 @@ function LFingerspellingCheck({
   const [attemptKey, setAttemptKey] = useState(0);
 
   return (
-    <div className="space-y-4">
+    <div
+      className="space-y-4"
+      data-onboarding-tutorial-target={
+        ONBOARDING_TUTORIAL_TARGETS.fingerspellingCheckPanel
+      }
+    >
       <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
         Step 4
       </p>
@@ -741,7 +830,12 @@ function LFingerspellingCheck({
 
 
       <div className="grid items-stretch gap-4 lg:grid-cols-1">
-        <div className="h-full rounded-2xl border border-slate-200 bg-white p-4">
+        <div
+          className="h-full rounded-2xl border border-slate-200 bg-white p-4"
+          data-onboarding-tutorial-target={
+            ONBOARDING_TUTORIAL_TARGETS.fingerspellingCheckPracticeCard
+          }
+        >
           <FingerspellingPractice
             key={`onboarding-llll-${attemptKey}`}
             mode="practice"
