@@ -4,7 +4,7 @@ This PRD is intentionally split into small, verifiable checklist items so the Ra
 
 ## 0. Prerequisite (Must Be Completed First)
 
-- [ ] Prerequisite: Fix existing lint/typecheck/test failures so `./ralph/gates.sh` passes on a clean git tree from the repo root, and record the successful gate run in `ralph/progress.md`. Do not check any items in Sections A-C until this checkbox is complete.
+- [x] Prerequisite: Fix existing lint/typecheck/test failures so `./ralph/gates.sh` passes on a clean git tree from the repo root, and record the successful gate run in `ralph/progress.md`. Do not check any items in Sections A-C until this checkbox is complete.
 
 ## A. Module 1 Tutorial Improvements (Make It Easier to Follow)
 
