@@ -52,7 +52,7 @@ export const MODULE_ONE_LESSONS: LessonConfig[] = [
     description: 'Mix all 10 letters and practice at your own pace.',
     type: 'gym',
     mode: 'practice',
-    letters: MODULE_ONE_LETTERS,
+    letters: [...MODULE_ONE_LETTERS],
   },
   {
     id: 'final-test',
@@ -60,6 +60,6 @@ export const MODULE_ONE_LESSONS: LessonConfig[] = [
     description: 'Time attack with all 10 letters.',
     type: 'test',
     mode: 'exam',
-    letters: MODULE_ONE_LETTERS,
+    letters: [...MODULE_ONE_LETTERS],
   },
 ];
