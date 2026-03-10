@@ -171,6 +171,36 @@ export default function Home() {
                 );
               })}
             </section>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                    Practice anytime
+                  </p>
+                  <h2 className="mt-2 text-xl font-semibold text-slate-900">
+                    Static Sign Playground
+                  </h2>
+                  <p className="mt-2 max-w-2xl text-sm text-slate-500">
+                    Jump straight into free practice for the 10 Module 1 static
+                    signs. The playground is always available and does not
+                    change your lesson progress.
+                  </p>
+                </div>
+
+                <div className="flex flex-col items-start gap-3 lg:items-end">
+                  <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                    Always unlocked
+                  </span>
+                  <Link
+                    href="/playground"
+                    className="inline-flex items-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  >
+                    Open playground
+                  </Link>
+                </div>
+              </div>
+            </section>
           </div>
         ) : null}
       </main>

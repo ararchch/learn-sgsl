@@ -7,6 +7,7 @@ import ModuleNav from '@/components/ModuleNav';
 import Module2IntroLessonView from '@/components/Module2IntroLessonView';
 import FingerspellingPractice from '@/components/FingerSpellingPractice';
 import { useUserProgress } from '@/hooks/useUserProgress';
+import { MODULE2_PRACTICE_TOUR_VERSION } from '@/lib/module1Tour';
 import { hasCompletedOnboarding } from '@/lib/onboarding';
 
 type LessonType = 'intro' | 'practice' | 'testing';
@@ -103,7 +104,13 @@ const spellingWords = [
 export default function ModuleTwoPage() {
   const router = useRouter();
   const [currentLessonId, setCurrentLessonId] = useState<string>(lessons[0].id);
-  const { profile, loading, completeLesson, unlockModule } = useUserProgress();
+  const {
+    profile,
+    loading,
+    completeLesson,
+    unlockModule,
+    completeModule2PracticeTour,
+  } = useUserProgress();
   const completedLessons = profile?.completedLessons ?? [];
 
   const currentLesson =
@@ -268,6 +275,12 @@ export default function ModuleTwoPage() {
                 words={SHORT_WORDS}
                 onComplete={markLessonComplete}
                 isCompleted={isCompleted}
+                practiceTourVersionCompleted={
+                  loading || !profile
+                    ? null
+                    : profile.module2PracticeTourVersionCompleted
+                }
+                onCompletePracticeTour={completeModule2PracticeTour}
               />
             )}
 
@@ -277,6 +290,12 @@ export default function ModuleTwoPage() {
                 words={LONG_WORDS}
                 onComplete={markLessonComplete}
                 isCompleted={isCompleted}
+                practiceTourVersionCompleted={
+                  loading || !profile
+                    ? null
+                    : profile.module2PracticeTourVersionCompleted
+                }
+                onCompletePracticeTour={completeModule2PracticeTour}
               />
             )}
 
@@ -313,10 +332,14 @@ function PracticeLessonContent({
   words,
   onComplete,
   isCompleted,
+  practiceTourVersionCompleted,
+  onCompletePracticeTour,
 }: {
   words: string[];
   onComplete: () => void;
   isCompleted: boolean;
+  practiceTourVersionCompleted: number | null;
+  onCompletePracticeTour: (version?: number) => Promise<void>;
 }) {
   const [wordIndex, setWordIndex] = useState(0);
   const [completedWordIndices, setCompletedWordIndices] = useState<Set<number>>(
@@ -327,6 +350,47 @@ function PracticeLessonContent({
     mistakes: number;
   } | null>(null);
   const completedRef = useRef(false);
+  const [practiceTourOpen, setPracticeTourOpen] = useState(false);
+  const [practiceTourStep, setPracticeTourStep] = useState(0);
+  const [practiceTourDismissedThisMount, setPracticeTourDismissedThisMount] =
+    useState(false);
+  const [practiceTourPopoverPosition, setPracticeTourPopoverPosition] =
+    useState<{
+      top: number;
+      left: number;
+    } | null>(null);
+  const [practiceTourPopoverPlacement, setPracticeTourPopoverPlacement] =
+    useState<'above' | 'below'>('below');
+  const practiceMainCardRef = useRef<HTMLDivElement | null>(null);
+  const practiceProgressBadgeRef = useRef<HTMLSpanElement | null>(null);
+  const practiceWorkspaceRef = useRef<HTMLDivElement | null>(null);
+  const practiceCurrentWordRef = useRef<HTMLDivElement | null>(null);
+  const practiceTourPopoverRef = useRef<HTMLDivElement | null>(null);
+
+  const MODULE2_PRACTICE_TOUR_STEPS = [
+    {
+      target: 'workspace',
+      title: 'Practice workspace',
+      message:
+        'This is the main fingerspelling practice area. Follow the target word, sign each letter in sequence, and pause/reset cleanly between letters.',
+    },
+    {
+      target: 'progress',
+      title: 'Lesson progress',
+      message:
+        'This badge tracks how many words you have completed in this lesson. Finish all words to complete the practice section.',
+    },
+    {
+      target: 'current-word',
+      title: 'Current word info',
+      message:
+        'This area shows the current target word, your last run stats, and the How to use button for replaying this tour.',
+    },
+  ] as const;
+  const module2PracticeTourCardHighlightClass =
+    'relative z-40 ring-4 ring-amber-400 ring-offset-4 ring-offset-slate-50 border-amber-300 bg-amber-50 shadow-lg shadow-amber-300/60 animate-pulse';
+  const module2PracticeTourInlineHighlightClass =
+    'relative z-40 ring-4 ring-amber-400 ring-offset-2 ring-offset-white rounded-xl shadow-md shadow-amber-300/60 animate-pulse';
 
   const currentWord = words[wordIndex] ?? words[0] ?? 'MRT';
   const totalPracticeWords = words.length;
@@ -360,49 +424,268 @@ function PracticeLessonContent({
     });
   }
 
+  const autoOpenPracticeTour =
+    practiceTourVersionCompleted != null &&
+    practiceTourVersionCompleted < MODULE2_PRACTICE_TOUR_VERSION &&
+    !practiceTourDismissedThisMount;
+  const isPracticeTourVisible = practiceTourOpen || autoOpenPracticeTour;
+  const practiceTourLastStep = MODULE2_PRACTICE_TOUR_STEPS.length - 1;
+  const currentPracticeTourStep =
+    MODULE2_PRACTICE_TOUR_STEPS[practiceTourStep] ??
+    MODULE2_PRACTICE_TOUR_STEPS[MODULE2_PRACTICE_TOUR_STEPS.length - 1];
+  const currentPracticeTourTarget = currentPracticeTourStep.target;
+
+  const isWorkspaceTourStep =
+    isPracticeTourVisible && currentPracticeTourTarget === 'workspace';
+  const isProgressTourStep =
+    isPracticeTourVisible && currentPracticeTourTarget === 'progress';
+  const isCurrentWordTourStep =
+    isPracticeTourVisible && currentPracticeTourTarget === 'current-word';
+
+  useEffect(() => {
+    if (!isPracticeTourVisible) return;
+    const targetElement =
+      currentPracticeTourTarget === 'workspace'
+        ? practiceWorkspaceRef.current
+        : currentPracticeTourTarget === 'progress'
+          ? practiceProgressBadgeRef.current
+          : currentPracticeTourTarget === 'current-word'
+            ? practiceCurrentWordRef.current
+            : null;
+    targetElement?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+      inline: 'nearest',
+    });
+  }, [isPracticeTourVisible, practiceTourStep, currentPracticeTourTarget]);
+
+  useEffect(() => {
+    if (!isPracticeTourVisible) return;
+
+    let frameId: number | null = null;
+
+    const schedulePositionUpdate = () => {
+      if (frameId != null) {
+        cancelAnimationFrame(frameId);
+      }
+
+      frameId = requestAnimationFrame(() => {
+        const target =
+          currentPracticeTourTarget === 'workspace'
+            ? practiceWorkspaceRef.current
+            : currentPracticeTourTarget === 'progress'
+              ? practiceProgressBadgeRef.current
+              : currentPracticeTourTarget === 'current-word'
+                ? practiceCurrentWordRef.current
+                : null;
+        const popover = practiceTourPopoverRef.current;
+        if (!target || !popover) return;
+
+        const margin = 12;
+        const targetRect = target.getBoundingClientRect();
+        const popoverRect = popover.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        let placement: 'above' | 'below' = 'below';
+        let top = targetRect.bottom + margin;
+
+        if (top + popoverRect.height + margin > viewportHeight) {
+          placement = 'above';
+          top = targetRect.top - popoverRect.height - margin;
+        }
+
+        if (top < margin) {
+          placement = 'below';
+          top = Math.max(margin, targetRect.bottom + margin);
+        }
+
+        const centeredLeft =
+          targetRect.left + targetRect.width / 2 - popoverRect.width / 2;
+        const left = Math.min(
+          Math.max(margin, centeredLeft),
+          viewportWidth - popoverRect.width - margin,
+        );
+
+        setPracticeTourPopoverPlacement(placement);
+        setPracticeTourPopoverPosition({ top, left });
+      });
+    };
+
+    schedulePositionUpdate();
+    window.addEventListener('resize', schedulePositionUpdate);
+    document.addEventListener('scroll', schedulePositionUpdate, true);
+
+    return () => {
+      if (frameId != null) {
+        cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener('resize', schedulePositionUpdate);
+      document.removeEventListener('scroll', schedulePositionUpdate, true);
+    };
+  }, [
+    isPracticeTourVisible,
+    practiceTourStep,
+    currentPracticeTourTarget,
+  ]);
+
+  async function dismissPracticeTour() {
+    setPracticeTourOpen(false);
+    setPracticeTourDismissedThisMount(true);
+    try {
+      await onCompletePracticeTour(MODULE2_PRACTICE_TOUR_VERSION);
+    } catch (error) {
+      console.error('Module 2 practice tour completion failed', error);
+    }
+  }
+
+  function openPracticeTour() {
+    setPracticeTourStep(0);
+    setPracticeTourOpen(true);
+  }
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-      <div className="relative rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
-        <span className="absolute right-4 top-4 md:right-5 md:top-5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-700">
+    <div className="grid gap-6">
+      <div
+        ref={practiceMainCardRef}
+        className={`relative rounded-2xl border border-slate-200 bg-white p-4 md:p-5 ${
+          isWorkspaceTourStep ? module2PracticeTourCardHighlightClass : ''
+        }`}
+      >
+        <span
+          ref={practiceProgressBadgeRef}
+          className={`absolute right-4 top-4 md:right-5 md:top-5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-700 ${
+            isProgressTourStep ? module2PracticeTourInlineHighlightClass : ''
+          }`}
+        >
           Progress {Math.min(completedWordIndices.size, totalPracticeWords)}/
           {totalPracticeWords}
         </span>
-        <FingerspellingPractice
-          mode="practice"
-          word={currentWord}
-          minConfidence={0.4}
-          minConfidenceByLetter={{ O: 0.3, S: 0.4 }}
-          onComplete={handleComplete}
-          onExit={() => {
-            setWordIndex((prev) => {
-              const next = prev + 1;
-              return totalPracticeWords > 0 ? next % totalPracticeWords : 0;
-            });
-            setLastMetrics(null);
-          }}
-        />
+        <div
+          ref={practiceCurrentWordRef}
+          className={`mb-4 flex flex-wrap items-start justify-between gap-3 pr-24 md:pr-28 ${
+            isCurrentWordTourStep ? module2PracticeTourInlineHighlightClass : ''
+          }`}
+        >
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+            <span className="text-slate-500">Current word:</span>
+            <span className="font-semibold text-slate-900">{currentWord}</span>
+            {lastMetrics && (
+              <>
+                <span className="text-slate-300">•</span>
+                <span>
+                  Last run: {(lastMetrics.timeTakenMs / 1000).toFixed(1)}s ·{' '}
+                  {lastMetrics.mistakes} mistakes
+                </span>
+              </>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={openPracticeTour}
+            className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-800"
+          >
+            How to use
+          </button>
+        </div>
+        <div ref={practiceWorkspaceRef}>
+          <FingerspellingPractice
+            mode="practice"
+            word={currentWord}
+            minConfidence={0.4}
+            minConfidenceByLetter={{ O: 0.3, S: 0.4 }}
+            onComplete={handleComplete}
+            onExit={() => {
+              setWordIndex((prev) => {
+                const next = prev + 1;
+                return totalPracticeWords > 0 ? next % totalPracticeWords : 0;
+              });
+              setLastMetrics(null);
+            }}
+          />
+        </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5 text-xs text-slate-600 space-y-3">
-        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-          Practice tips
-        </p>
-        <ul className="list-disc pl-4 space-y-1 text-slate-500">
-          <li>Keep your hand centered inside the target box.</li>
-          <li>Relax your hand between letters to avoid double counts.</li>
-          <li>Use the hint card if you miss a letter for too long.</li>
-          <li>Use Exit to skip the current attempt and move on.</li>
-        </ul>
-        {lastMetrics && (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
-            Last run: {(lastMetrics.timeTakenMs / 1000).toFixed(1)}s ·{' '}
-            {lastMetrics.mistakes} mistakes
+      {isPracticeTourVisible && (
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none fixed inset-0 z-30 bg-slate-900/45"
+          />
+          <div
+            ref={practiceTourPopoverRef}
+            className="pointer-events-auto fixed z-50 w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-amber-200 bg-white p-4 shadow-xl shadow-slate-900/25"
+            style={
+              practiceTourPopoverPosition
+                ? {
+                    top: practiceTourPopoverPosition.top,
+                    left: practiceTourPopoverPosition.left,
+                  }
+                : { top: 16, left: 16 }
+            }
+          >
+            <div
+              aria-hidden="true"
+              className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border border-amber-200 bg-white ${
+                practiceTourPopoverPlacement === 'below'
+                  ? '-top-1.5 border-r-0 border-b-0'
+                  : '-bottom-1.5 border-l-0 border-t-0'
+              }`}
+            />
+            <p className="text-[11px] uppercase tracking-[0.2em] text-amber-700">
+              Practice tour · Step {practiceTourStep + 1}/
+              {MODULE2_PRACTICE_TOUR_STEPS.length}
+            </p>
+            <p className="mt-2 text-sm font-semibold text-slate-900">
+              {currentPracticeTourStep.title}
+            </p>
+            <p className="mt-1 text-xs text-slate-600">
+              {currentPracticeTourStep.message}
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  void dismissPracticeTour();
+                }}
+                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-800"
+              >
+                Skip
+              </button>
+              {practiceTourStep > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPracticeTourStep((prev) => Math.max(0, prev - 1))}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-800"
+                >
+                  Back
+                </button>
+              )}
+              {practiceTourStep < practiceTourLastStep ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPracticeTourStep((prev) => Math.min(practiceTourLastStep, prev + 1))
+                  }
+                  className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-500"
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void dismissPracticeTour();
+                  }}
+                  className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-500"
+                >
+                  Done
+                </button>
+              )}
+            </div>
           </div>
-        )}
-        <p className="text-[11px] text-slate-500">
-          Current word: <span className="font-semibold">{currentWord}</span>
-        </p>
-      </div>
+        </>
+      )}
     </div>
   );
 }

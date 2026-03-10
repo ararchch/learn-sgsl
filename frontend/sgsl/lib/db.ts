@@ -16,6 +16,9 @@ type UserProfile = {
   completedLessons: string[];
   unlockedModules: number[];
   module1LessonTourVersionCompleted: number;
+  module1PracticeTourVersionCompleted: number;
+  module2PracticeTourVersionCompleted: number;
+  playgroundTourVersionCompleted: number;
 } & OnboardingProfileFields;
 
 type UserUpdate = Partial<Omit<UserProfile, 'username'>> & {
@@ -157,6 +160,21 @@ function normalizeUser(raw: unknown): UserProfile | null {
   )
     ? Math.max(0, Math.floor(Number(user.module1LessonTourVersionCompleted)))
     : 0;
+  const module1PracticeTourVersionCompleted = Number.isFinite(
+    Number(user.module1PracticeTourVersionCompleted),
+  )
+    ? Math.max(0, Math.floor(Number(user.module1PracticeTourVersionCompleted)))
+    : 0;
+  const module2PracticeTourVersionCompleted = Number.isFinite(
+    Number(user.module2PracticeTourVersionCompleted),
+  )
+    ? Math.max(0, Math.floor(Number(user.module2PracticeTourVersionCompleted)))
+    : 0;
+  const playgroundTourVersionCompleted = Number.isFinite(
+    Number(user.playgroundTourVersionCompleted),
+  )
+    ? Math.max(0, Math.floor(Number(user.playgroundTourVersionCompleted)))
+    : 0;
 
   return {
     username,
@@ -171,6 +189,9 @@ function normalizeUser(raw: unknown): UserProfile | null {
     onboardingDurationMs,
     onboardingStepsCompleted,
     module1LessonTourVersionCompleted,
+    module1PracticeTourVersionCompleted,
+    module2PracticeTourVersionCompleted,
+    playgroundTourVersionCompleted,
   };
 }
 
@@ -213,6 +234,9 @@ export async function createUser(username: string): Promise<UserProfile> {
     completedLessons: [],
     unlockedModules: [1],
     module1LessonTourVersionCompleted: 0,
+    module1PracticeTourVersionCompleted: 0,
+    module2PracticeTourVersionCompleted: 0,
+    playgroundTourVersionCompleted: 0,
     ...DEFAULT_ONBOARDING_FIELDS,
   };
   users.push(profile);

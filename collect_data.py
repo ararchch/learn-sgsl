@@ -10,7 +10,7 @@ import mediapipe as mp
 # ======= CONFIG =======
 # Edit this list to your target static letters (exclude dynamic letters like J/Z).
 LABELS = [
-    "T", "O", "I", "N", "S", "R", "L", "C"
+    "U", "V", "I", "N", "S", "R", "L", "C"
 ]
 CAPTURE_EVERY_N_FRAMES = 3
 DATA_DIR = Path("data"); DATA_DIR.mkdir(parents=True, exist_ok=True)

@@ -12,7 +12,12 @@ import type {
   OnboardingProfileFields,
   OnboardingStepId,
 } from '@/lib/onboarding';
-import { MODULE1_LESSON_TOUR_VERSION } from '@/lib/module1Tour';
+import {
+  MODULE1_LESSON_TOUR_VERSION,
+  MODULE1_PRACTICE_TOUR_VERSION,
+  MODULE2_PRACTICE_TOUR_VERSION,
+  PLAYGROUND_TOUR_VERSION,
+} from '@/lib/module1Tour';
 
 export type UserProfile = {
   username: string;
@@ -22,6 +27,9 @@ export type UserProfile = {
   completedLessons: string[];
   unlockedModules: number[];
   module1LessonTourVersionCompleted: number;
+  module1PracticeTourVersionCompleted: number;
+  module2PracticeTourVersionCompleted: number;
+  playgroundTourVersionCompleted: number;
 } & OnboardingProfileFields;
 
 type UserProgressContextValue = {
@@ -34,6 +42,9 @@ type UserProgressContextValue = {
   completeOnboardingStep: (stepId: OnboardingStepId) => Promise<void>;
   completeOnboarding: (durationMs: number) => Promise<void>;
   completeModule1LessonTour: (version?: number) => Promise<void>;
+  completeModule1PracticeTour: (version?: number) => Promise<void>;
+  completeModule2PracticeTour: (version?: number) => Promise<void>;
+  completePlaygroundTour: (version?: number) => Promise<void>;
   resetOnboarding: () => Promise<void>;
   logout: () => void;
 };
@@ -252,6 +263,115 @@ export function UserProgressProvider({
     [profile],
   );
 
+  const completeModule1PracticeTour = useCallback(
+    async (version: number = MODULE1_PRACTICE_TOUR_VERSION) => {
+      if (!profile?.username) return;
+      if (!Number.isFinite(version)) return;
+      const normalizedVersion = Math.max(0, Math.floor(version));
+      if (
+        (profile.module1PracticeTourVersionCompleted ?? 0) >= normalizedVersion
+      ) {
+        return;
+      }
+
+      const optimistic: UserProfile = {
+        ...profile,
+        module1PracticeTourVersionCompleted: normalizedVersion,
+      };
+      setProfile(optimistic);
+
+      try {
+        const response = await fetch('/api/user/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: profile.username,
+            module1PracticeTourVersionCompleted: normalizedVersion,
+          }),
+        });
+        if (response.ok) {
+          const data = (await response.json()) as UserProfile;
+          setProfile(data);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    [profile],
+  );
+
+  const completeModule2PracticeTour = useCallback(
+    async (version: number = MODULE2_PRACTICE_TOUR_VERSION) => {
+      if (!profile?.username) return;
+      if (!Number.isFinite(version)) return;
+      const normalizedVersion = Math.max(0, Math.floor(version));
+      if (
+        (profile.module2PracticeTourVersionCompleted ?? 0) >= normalizedVersion
+      ) {
+        return;
+      }
+
+      const optimistic: UserProfile = {
+        ...profile,
+        module2PracticeTourVersionCompleted: normalizedVersion,
+      };
+      setProfile(optimistic);
+
+      try {
+        const response = await fetch('/api/user/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: profile.username,
+            module2PracticeTourVersionCompleted: normalizedVersion,
+          }),
+        });
+        if (response.ok) {
+          const data = (await response.json()) as UserProfile;
+          setProfile(data);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    [profile],
+  );
+
+  const completePlaygroundTour = useCallback(
+    async (version: number = PLAYGROUND_TOUR_VERSION) => {
+      if (!profile?.username) return;
+      if (!Number.isFinite(version)) return;
+      const normalizedVersion = Math.max(0, Math.floor(version));
+      if ((profile.playgroundTourVersionCompleted ?? 0) >= normalizedVersion) {
+        return;
+      }
+
+      const optimistic: UserProfile = {
+        ...profile,
+        playgroundTourVersionCompleted: normalizedVersion,
+      };
+      setProfile(optimistic);
+
+      try {
+        const response = await fetch('/api/user/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: profile.username,
+            playgroundTourVersionCompleted: normalizedVersion,
+          }),
+        });
+        if (response.ok) {
+          const data = (await response.json()) as UserProfile;
+          setProfile(data);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    [profile],
+  );
+
   const resetOnboarding = useCallback(async () => {
     await updateOnboardingState({ action: 'reset', throwOnError: true });
   }, [updateOnboardingState]);
@@ -276,6 +396,9 @@ export function UserProgressProvider({
       completeOnboardingStep,
       completeOnboarding,
       completeModule1LessonTour,
+      completeModule1PracticeTour,
+      completeModule2PracticeTour,
+      completePlaygroundTour,
       resetOnboarding,
       logout,
     }),
@@ -289,6 +412,9 @@ export function UserProgressProvider({
       completeOnboardingStep,
       completeOnboarding,
       completeModule1LessonTour,
+      completeModule1PracticeTour,
+      completeModule2PracticeTour,
+      completePlaygroundTour,
       resetOnboarding,
       logout,
     ],

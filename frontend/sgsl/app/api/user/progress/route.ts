@@ -15,6 +15,15 @@ export async function POST(request: Request) {
     const requestedModule1TourVersion = Number(
       body?.module1LessonTourVersionCompleted,
     );
+    const requestedModule1PracticeTourVersion = Number(
+      body?.module1PracticeTourVersionCompleted,
+    );
+    const requestedModule2PracticeTourVersion = Number(
+      body?.module2PracticeTourVersionCompleted,
+    );
+    const requestedPlaygroundTourVersion = Number(
+      body?.playgroundTourVersionCompleted,
+    );
 
     if (!username) {
       return NextResponse.json(
@@ -33,6 +42,9 @@ export async function POST(request: Request) {
       completedLessons?: string[];
       unlockedModules?: number[];
       module1LessonTourVersionCompleted?: number;
+      module1PracticeTourVersionCompleted?: number;
+      module2PracticeTourVersionCompleted?: number;
+      playgroundTourVersionCompleted?: number;
     } = {};
 
     if (nextXp !== existing.xp) {
@@ -59,6 +71,45 @@ export async function POST(request: Request) {
       ) {
         updates.module1LessonTourVersionCompleted =
           normalizedRequestedTourVersion;
+      }
+    }
+    if (Number.isFinite(requestedModule1PracticeTourVersion)) {
+      const normalizedRequestedPracticeTourVersion = Math.max(
+        0,
+        Math.floor(requestedModule1PracticeTourVersion),
+      );
+      if (
+        normalizedRequestedPracticeTourVersion >
+        (existing.module1PracticeTourVersionCompleted ?? 0)
+      ) {
+        updates.module1PracticeTourVersionCompleted =
+          normalizedRequestedPracticeTourVersion;
+      }
+    }
+    if (Number.isFinite(requestedModule2PracticeTourVersion)) {
+      const normalizedRequestedModule2PracticeTourVersion = Math.max(
+        0,
+        Math.floor(requestedModule2PracticeTourVersion),
+      );
+      if (
+        normalizedRequestedModule2PracticeTourVersion >
+        (existing.module2PracticeTourVersionCompleted ?? 0)
+      ) {
+        updates.module2PracticeTourVersionCompleted =
+          normalizedRequestedModule2PracticeTourVersion;
+      }
+    }
+    if (Number.isFinite(requestedPlaygroundTourVersion)) {
+      const normalizedRequestedPlaygroundTourVersion = Math.max(
+        0,
+        Math.floor(requestedPlaygroundTourVersion),
+      );
+      if (
+        normalizedRequestedPlaygroundTourVersion >
+        (existing.playgroundTourVersionCompleted ?? 0)
+      ) {
+        updates.playgroundTourVersionCompleted =
+          normalizedRequestedPlaygroundTourVersion;
       }
     }
 

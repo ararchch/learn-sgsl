@@ -1,20 +1,72 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+
+type HandLandmark = {
+  x: number;
+  y: number;
+  z?: number;
+};
+
+type LegacyGetUserMedia = (
+  constraints: MediaStreamConstraints,
+  success: (stream: MediaStream) => void,
+  failure: (error: unknown) => void,
+) => void;
+
+type MediaPipeHands = {
+  setOptions: (options: {
+    maxNumHands: number;
+    modelComplexity: number;
+    minDetectionConfidence: number;
+    minTrackingConfidence: number;
+  }) => void;
+  onResults: (callback: (results: MPResults) => void | Promise<void>) => void;
+  close?: () => void;
+  send: (payload: { image: HTMLVideoElement }) => Promise<void>;
+};
+
+type HandsConstructor = new (options: {
+  locateFile: (file: string) => string;
+}) => MediaPipeHands;
+
+type DrawingUtilsInstance = {
+  drawConnectors: (
+    hand: HandLandmark[],
+    connections: unknown,
+    options: { lineWidth: number },
+  ) => void;
+  drawLandmarks: (
+    hand: HandLandmark[],
+    options: { radius: number; lineWidth: number },
+  ) => void;
+};
+
+type DrawingUtilsConstructor = new (
+  ctx: CanvasRenderingContext2D,
+) => DrawingUtilsInstance;
+
+type MediaPipeWindow = Window & {
+  DrawingUtils?: DrawingUtilsConstructor;
+  HAND_CONNECTIONS?: unknown;
+  Hands?: HandsConstructor;
+};
 
 interface Props {
   allowedLetters?: string[];
   targetLetter?: string;
   onConfidentPrediction?: (letter: string) => void;
+  onPredictionChange?: (prediction: PredictResponse | null) => void;
   hideSkeleton?: boolean;
   showDotsOnly?: boolean;
   confidenceThreshold?: number;
+  showPredictionPanel?: boolean;
 }
 
-interface PredictResponse {
+export interface PredictResponse {
   letter: string;
   confidence: number;
   margin: number;
@@ -22,8 +74,13 @@ interface PredictResponse {
 }
 
 type MPResults = {
-  multiHandLandmarks?: { x: number; y: number; z?: number }[][];
+  multiHandLandmarks?: HandLandmark[][];
 };
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
 
 function hasUsableVideoFrame(video: HTMLVideoElement): boolean {
   return (
@@ -37,15 +94,17 @@ export default function StaticLetterPractice({
   allowedLetters,
   targetLetter,
   onConfidentPrediction,
+  onPredictionChange,
   hideSkeleton = false,
   showDotsOnly = false,
   confidenceThreshold = 0.6,
+  showPredictionPanel = true,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const autoStartedRef = useRef(false);
 
-  const handsRef = useRef<any | null>(null);
+  const handsRef = useRef<MediaPipeHands | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
 
@@ -61,6 +120,9 @@ export default function StaticLetterPractice({
   const confidenceThresholdRef = useRef<number>(confidenceThreshold);
   const onConfidentRef = useRef<Props['onConfidentPrediction']>(
     onConfidentPrediction,
+  );
+  const onPredictionChangeRef = useRef<Props['onPredictionChange']>(
+    onPredictionChange,
   );
   const handleResultsRef = useRef<((results: MPResults) => void) | null>(null);
 
@@ -80,9 +142,11 @@ export default function StaticLetterPractice({
     onConfidentRef.current = onConfidentPrediction;
   }, [onConfidentPrediction]);
 
-  function flattenLandmarks(
-    lms: { x: number; y: number; z?: number }[],
-  ): number[] {
+  useEffect(() => {
+    onPredictionChangeRef.current = onPredictionChange;
+  }, [onPredictionChange]);
+
+  function flattenLandmarks(lms: HandLandmark[]): number[] {
     const arr = new Array(63);
     for (let i = 0; i < 21; i++) {
       const p = lms[i];
@@ -106,7 +170,7 @@ export default function StaticLetterPractice({
     return res.json();
   }
 
-  function drawHand(results: MPResults) {
+  const drawHand = useEffectEvent((results: MPResults) => {
     if (hideSkeleton && !showDotsOnly) return;
     const canvas = canvasRef.current;
     const video = videoRef.current;
@@ -131,13 +195,14 @@ export default function StaticLetterPractice({
     ctx.translate(width, 0);
     ctx.scale(-1, 1); // mirror like selfie
 
-    const DrawingUtils = (window as any).DrawingUtils;
-    const HAND_CONNECTIONS = (window as any).HAND_CONNECTIONS;
+    const mediaPipeWindow = window as MediaPipeWindow;
+    const DrawingUtils = mediaPipeWindow.DrawingUtils;
+    const handConnections = mediaPipeWindow.HAND_CONNECTIONS;
 
-    if (DrawingUtils && HAND_CONNECTIONS) {
+    if (DrawingUtils && handConnections) {
       const DU = new DrawingUtils(ctx);
       if (!hideSkeleton) {
-        DU.drawConnectors(hand, HAND_CONNECTIONS, { lineWidth: 3 });
+        DU.drawConnectors(hand, handConnections, { lineWidth: 3 });
       }
       DU.drawLandmarks(hand, { radius: 2.2, lineWidth: 1 });
     } else {
@@ -152,7 +217,7 @@ export default function StaticLetterPractice({
     }
 
     ctx.restore();
-  }
+  });
 
   // 🔁 define the core results handler into a ref (no stale closures)
   useEffect(() => {
@@ -160,7 +225,11 @@ export default function StaticLetterPractice({
       drawHand(results);
 
       const handLandmarks = results.multiHandLandmarks;
-      if (!handLandmarks?.length) return;
+      if (!handLandmarks?.length) {
+        setPrediction(null);
+        onPredictionChangeRef.current?.(null);
+        return;
+      }
 
       const hand = handLandmarks[0];
 
@@ -181,6 +250,7 @@ export default function StaticLetterPractice({
 
         // ✅ always display whatever the model predicts
         setPrediction(res);
+        onPredictionChangeRef.current?.(res);
 
         const currentAllowed = allowedLettersRef.current;
         const currentTarget = targetLetterRef.current;
@@ -200,9 +270,9 @@ export default function StaticLetterPractice({
           // small debounce so one frame doesn't fire multiple times in dev/StrictMode
           onConfidentRef.current(res.letter);
         }
-      } catch (e: any) {
-        console.error(e);
-        setError(e.message || 'Prediction error');
+      } catch (error: unknown) {
+        console.error(error);
+        setError(getErrorMessage(error, 'Prediction error'));
       }
     };
   }, []); // depends only on refs / helpers
@@ -210,6 +280,7 @@ export default function StaticLetterPractice({
   async function startPipeline() {
     setError(null);
     setPrediction(null);
+    onPredictionChangeRef.current?.(null);
     frameCountRef.current = 0;
 
     const video = videoRef.current;
@@ -234,18 +305,25 @@ export default function StaticLetterPractice({
         : null;
 
     const legacyGetUserMedia =
-      (navigator as any).getUserMedia ||
-      (navigator as any).webkitGetUserMedia ||
-      (navigator as any).mozGetUserMedia ||
-      (navigator as any).msGetUserMedia ||
-      null;
+      ((navigator as Navigator & { getUserMedia?: LegacyGetUserMedia })
+        .getUserMedia ||
+        (
+          navigator as Navigator & {
+            webkitGetUserMedia?: LegacyGetUserMedia;
+          }
+        ).webkitGetUserMedia ||
+        (navigator as Navigator & { mozGetUserMedia?: LegacyGetUserMedia })
+          .mozGetUserMedia ||
+        (navigator as Navigator & { msGetUserMedia?: LegacyGetUserMedia })
+          .msGetUserMedia ||
+        null) as LegacyGetUserMedia | null;
 
     if (!getUserMediaModern && !legacyGetUserMedia) {
       setError('Camera API not supported in this browser/environment.');
       return;
     }
 
-    const HandsCtor = (window as any).Hands;
+    const HandsCtor = (window as MediaPipeWindow).Hands;
     if (!HandsCtor) {
       setError('Mediapipe Hands not loaded. Check hands.js script.');
       return;
@@ -260,7 +338,7 @@ export default function StaticLetterPractice({
             navigator,
             constraints,
             (s: MediaStream) => resolve(s),
-            (err: any) => reject(err),
+            (err: unknown) => reject(err),
           );
         } else {
           reject(new Error('No getUserMedia implementation found.'));
@@ -270,9 +348,9 @@ export default function StaticLetterPractice({
       streamRef.current = stream;
       video.srcObject = stream;
       await video.play();
-    } catch (e: any) {
-      console.error(e);
-      setError(e.message || 'Unable to access camera');
+    } catch (error: unknown) {
+      console.error(error);
+      setError(getErrorMessage(error, 'Unable to access camera'));
       return;
     }
 
@@ -349,6 +427,8 @@ export default function StaticLetterPractice({
     }
 
     setRunning(false);
+    setPrediction(null);
+    onPredictionChangeRef.current?.(null);
   }
 
   // Cleanup on unmount.
@@ -388,27 +468,35 @@ export default function StaticLetterPractice({
         )}
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-3 text-xs">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-            Live prediction
-          </span>
-          {prediction && (
-            <span className="text-[11px] text-slate-500">
-              Confidence: {(prediction.confidence * 100).toFixed(1)}% · Margin:{' '}
-              {prediction.margin.toFixed(2)}
+      {showPredictionPanel && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 text-xs">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+              Live prediction
             </span>
+            {prediction && (
+              <span className="text-[11px] text-slate-500">
+                Confidence: {(prediction.confidence * 100).toFixed(1)}% · Margin:{' '}
+                {prediction.margin.toFixed(2)}
+              </span>
+            )}
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-4xl font-semibold tracking-[0.25em] text-slate-900">
+              {prediction?.letter ?? '—'}
+            </span>
+          </div>
+          {error && (
+            <p className="mt-2 text-[11px] text-red-400">Error: {error}</p>
           )}
         </div>
-        <div className="flex items-baseline gap-2">
-          <span className="text-4xl font-semibold tracking-[0.25em] text-slate-900">
-            {prediction?.letter ?? '—'}
-          </span>
-        </div>
-        {error && (
-          <p className="mt-2 text-[11px] text-red-400">Error: {error}</p>
-        )}
-      </div>
+      )}
+
+      {!showPredictionPanel && error && (
+        <p className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-500">
+          Error: {error}
+        </p>
+      )}
     </div>
   );
 }

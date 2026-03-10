@@ -50,6 +50,12 @@ def decision_margin(dec):
     return top2[-1] - top2[-2]
 
 
+def softmax_np(x: np.ndarray) -> np.ndarray:
+    """Numerically stable softmax for 1D numpy arrays."""
+    exps = np.exp(x - np.max(x))
+    return exps / np.sum(exps)
+
+
 def open_camera(index: int):
     """Try AVFoundation on macOS, fallback otherwise."""
     cap = cv2.VideoCapture(index, cv2.CAP_AVFOUNDATION)
@@ -93,6 +99,7 @@ def main():
 
             pred_text = "—"
             margin_val = 0.0
+            conf_val = 0.0
 
             if res.multi_hand_landmarks:
                 hand_lms = res.multi_hand_landmarks[0]
@@ -111,11 +118,14 @@ def main():
                     dec = clf.decision_function(x).ravel()
                     margin_val = decision_margin(dec)
                     pred_idx = int(np.argmax(dec))
+                    probs = softmax_np(dec)
+                    conf_val = float(probs[pred_idx])
                 else:
                     probs = clf.predict_proba(x).ravel()
                     top2 = np.sort(probs)[-2:]
                     margin_val = float(top2[-1] - top2[-2])
                     pred_idx = int(np.argmax(probs))
+                    conf_val = float(probs[pred_idx])
 
                 vote_buf.append(class_names[pred_idx])
 
@@ -125,10 +135,19 @@ def main():
                         pred_text = vote
 
             # UI overlay
-            cv2.rectangle(frame, (0, 0), (w, 70), (0, 0, 0), -1)
+            cv2.rectangle(frame, (0, 0), (w, 105), (0, 0, 0), -1)
             cv2.putText(
-                frame, f"Pred: {pred_text}", (10, 45),
-                cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 255), 2
+                frame, f"Pred: {pred_text}", (10, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2
+            )
+            cv2.putText(
+                frame,
+                f"Conf: {conf_val * 100:.1f}%   Margin: {margin_val:.2f}",
+                (10, 80),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (255, 255, 255),
+                2,
             )
             cv2.putText(
                 frame, "Press 'Q' to quit", (10, h - 10),

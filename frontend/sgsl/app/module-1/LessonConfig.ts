@@ -1,3 +1,5 @@
+import { MODULE_ONE_LETTERS } from '@/lib/moduleOneSigns';
+
 export type LessonType = 'intro' | 'interactive' | 'gym' | 'test';
 export type LessonMode = 'learn' | 'practice' | 'exam';
 
@@ -11,7 +13,7 @@ export interface LessonConfig {
   notes?: Record<string, string>;
 }
 
-export const MODULE_ONE_LETTERS = ['E', 'T', 'A', 'O', 'I', 'N', 'S', 'R', 'L', 'C'];
+export { MODULE_ONE_LETTERS } from '@/lib/moduleOneSigns';
 
 export const MODULE_ONE_LESSONS: LessonConfig[] = [
   {

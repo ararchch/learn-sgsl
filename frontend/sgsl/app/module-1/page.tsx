@@ -7,7 +7,10 @@ import StaticLetterPractice from '@/components/StaticLetterPractice';
 import ModuleNav from '@/components/ModuleNav';
 import IntroLessonView from '@/components/IntroLessonView';
 import { useUserProgress } from '@/hooks/useUserProgress';
-import { MODULE1_LESSON_TOUR_VERSION } from '@/lib/module1Tour';
+import {
+  MODULE1_LESSON_TOUR_VERSION,
+  MODULE1_PRACTICE_TOUR_VERSION,
+} from '@/lib/module1Tour';
 import { hasCompletedOnboarding } from '@/lib/onboarding';
 import {
   MODULE_ONE_LESSONS,
@@ -17,16 +20,31 @@ import {
 type LessonStatus = 'idle' | 'detecting' | 'holding' | 'success' | 'failed';
 const INTERACTIVE_LESSON_TOUR_STEPS = [
   {
+    target: 'letter-strip' as const,
     title: 'Letter strip',
     message:
       'Tap each letter here to learn it. You need to visit all letters in this row to complete this lesson.',
   },
   {
+    target: 'mirror-panel' as const,
+    title: 'Your Mirror',
+    message:
+      'This is your main practice panel. Copy the current letter here and watch your live camera + prediction feedback while you hold the sign steady.',
+  },
+  {
+    target: 'guide-panel' as const,
+    title: 'Guide panel',
+    message:
+      'This panel shows the correct sign reference for the current letter. Use it to compare your handshape before and during practice.',
+  },
+  {
+    target: 'guide-mode' as const,
     title: 'Guide mode',
     message:
       'Switch between Video and Image to see the sign in motion or as a static handshape.',
   },
   {
+    target: 'guide-orientation' as const,
     title: 'Orientation',
     message:
       'Use Normal and Mirrored to flip the guide so it matches how you prefer to copy signs.',
@@ -52,6 +70,7 @@ function Module1Container() {
     completeLesson,
     unlockModule,
     completeModule1LessonTour,
+    completeModule1PracticeTour,
   } = useUserProgress();
   const completedLessons = profile?.completedLessons ?? [];
 
@@ -242,6 +261,12 @@ function Module1Container() {
                   letters={currentLesson.letters}
                   isCompleted={isCompleted}
                   onComplete={markLessonComplete}
+                  practiceTourVersionCompleted={
+                    loading || !profile
+                      ? null
+                      : profile.module1PracticeTourVersionCompleted
+                  }
+                  onCompletePracticeTour={completeModule1PracticeTour}
                 />
               )}
 
@@ -304,26 +329,29 @@ function InteractiveLessonView({
   const [tourOpen, setTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
   const [tourDismissedThisMount, setTourDismissedThisMount] = useState(false);
+  const [tourPopoverPosition, setTourPopoverPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const [tourPopoverPlacement, setTourPopoverPlacement] = useState<
+    'above' | 'below'
+  >('below');
 
   const holdStartRef = useRef<number | null>(null);
   const lastHitRef = useRef<number | null>(null);
   const completedRef = useRef(false);
   const guideVideoRef = useRef<HTMLVideoElement | null>(null);
   const letterStripRef = useRef<HTMLDivElement | null>(null);
+  const mirrorPanelRef = useRef<HTMLDivElement | null>(null);
+  const guidePanelRef = useRef<HTMLDivElement | null>(null);
   const guideModeToggleRef = useRef<HTMLDivElement | null>(null);
   const guideOrientationToggleRef = useRef<HTMLDivElement | null>(null);
+  const tourPopoverRef = useRef<HTMLDivElement | null>(null);
 
   const holdMs = 2000;
   const targetLetter = lesson.letters[currentIdx];
-  const letterNote = lesson.notes?.[targetLetter];
   const guideTransform =
     guideOrientation === 'mirrored' ? 'scaleX(-1)' : undefined;
-  const feedbackMessage =
-    status === 'holding'
-      ? `“${targetLetter}” is being recognized. Keep the same shape and position.`
-      : status === 'success'
-        ? `“${targetLetter}” confirmed. Move to the next letter when ready.`
-        : `Recognition only works when your hand clearly matches “${targetLetter}” and stays steady for about 2 seconds.`;
   const autoOpenTour =
     tourVersionCompleted != null &&
     tourVersionCompleted < MODULE1_LESSON_TOUR_VERSION &&
@@ -333,13 +361,16 @@ function InteractiveLessonView({
   const currentTourStep =
     INTERACTIVE_LESSON_TOUR_STEPS[tourStep] ??
     INTERACTIVE_LESSON_TOUR_STEPS[INTERACTIVE_LESSON_TOUR_STEPS.length - 1];
-  const isLetterTourStep = isTourVisible && tourStep === 0;
-  const isGuideModeTourStep = isTourVisible && tourStep === 1;
-  const isGuideOrientationTourStep = isTourVisible && tourStep === 2;
+  const activeTourTarget = isTourVisible ? currentTourStep.target : null;
+  const isLetterTourStep = activeTourTarget === 'letter-strip';
+  const isMirrorPanelTourStep = activeTourTarget === 'mirror-panel';
+  const isGuidePanelTourStep = activeTourTarget === 'guide-panel';
+  const isGuideModeTourStep = activeTourTarget === 'guide-mode';
+  const isGuideOrientationTourStep = activeTourTarget === 'guide-orientation';
   const tourCardHighlightClass =
-    'ring-4 ring-amber-400 ring-offset-4 ring-offset-slate-50 border-amber-300 bg-amber-50 shadow-lg shadow-amber-300/60 animate-pulse';
+    'relative z-40 ring-4 ring-amber-400 ring-offset-4 ring-offset-slate-50 border-amber-300 bg-amber-50 shadow-lg shadow-amber-300/60 animate-pulse';
   const tourControlHighlightClass =
-    'ring-4 ring-amber-400 ring-offset-2 ring-offset-white border-amber-300 bg-amber-100 shadow-md shadow-amber-300/60 animate-pulse';
+    'relative z-40 ring-4 ring-amber-400 ring-offset-2 ring-offset-white border-amber-300 bg-amber-100 shadow-md shadow-amber-300/60 animate-pulse';
 
   useEffect(() => {
     setCurrentIdx(0);
@@ -422,18 +453,94 @@ function InteractiveLessonView({
 
   useEffect(() => {
     if (!isTourVisible) return;
-    const targetRefs = [
-      letterStripRef.current,
-      guideModeToggleRef.current,
-      guideOrientationToggleRef.current,
-    ];
-    const target = targetRefs[tourStep];
-    target?.scrollIntoView({
+    const targetElement =
+      currentTourStep.target === 'letter-strip'
+        ? letterStripRef.current
+        : currentTourStep.target === 'mirror-panel'
+          ? mirrorPanelRef.current
+            : currentTourStep.target === 'guide-panel'
+              ? guidePanelRef.current
+              : currentTourStep.target === 'guide-mode'
+                ? guideModeToggleRef.current
+                : currentTourStep.target === 'guide-orientation'
+                  ? guideOrientationToggleRef.current
+                  : null;
+    targetElement?.scrollIntoView({
       behavior: 'smooth',
       block: 'center',
       inline: 'nearest',
     });
-  }, [isTourVisible, tourStep]);
+  }, [isTourVisible, tourStep, currentTourStep.target]);
+
+  useEffect(() => {
+    if (!isTourVisible) return;
+
+    let frameId: number | null = null;
+
+    const schedulePositionUpdate = () => {
+      if (frameId != null) {
+        cancelAnimationFrame(frameId);
+      }
+
+      frameId = requestAnimationFrame(() => {
+        const target =
+          currentTourStep.target === 'letter-strip'
+            ? letterStripRef.current
+            : currentTourStep.target === 'mirror-panel'
+              ? mirrorPanelRef.current
+                : currentTourStep.target === 'guide-panel'
+                  ? guidePanelRef.current
+                  : currentTourStep.target === 'guide-mode'
+                    ? guideModeToggleRef.current
+                    : currentTourStep.target === 'guide-orientation'
+                      ? guideOrientationToggleRef.current
+                      : null;
+        const popover = tourPopoverRef.current;
+        if (!target || !popover) return;
+
+        const margin = 12;
+        const targetRect = target.getBoundingClientRect();
+        const popoverRect = popover.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        let placement: 'above' | 'below' = 'below';
+        let top = targetRect.bottom + margin;
+
+        if (top + popoverRect.height + margin > viewportHeight) {
+          placement = 'above';
+          top = targetRect.top - popoverRect.height - margin;
+        }
+
+        if (top < margin) {
+          placement = 'below';
+          top = Math.max(margin, targetRect.bottom + margin);
+        }
+
+        const centeredLeft =
+          targetRect.left + targetRect.width / 2 - popoverRect.width / 2;
+        const left = Math.min(
+          Math.max(margin, centeredLeft),
+          viewportWidth - popoverRect.width - margin,
+        );
+
+        setTourPopoverPlacement(placement);
+        setTourPopoverPosition({ top, left });
+      });
+    };
+
+    schedulePositionUpdate();
+    window.addEventListener('resize', schedulePositionUpdate);
+    document.addEventListener('scroll', schedulePositionUpdate, true);
+
+    return () => {
+      if (frameId != null) {
+        cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener('resize', schedulePositionUpdate);
+      document.removeEventListener('scroll', schedulePositionUpdate, true);
+    };
+  }, [isTourVisible, tourStep, currentTourStep.target]);
 
   function handlePrediction(letter: string) {
     if (letter !== targetLetter) return;
@@ -470,9 +577,18 @@ function InteractiveLessonView({
           isLetterTourStep ? tourCardHighlightClass : ''
         }`}
       >
-        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-          Tap every letter in this row to complete this lesson
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+            Tap every letter in this row to complete this lesson
+          </p>
+          <button
+            type="button"
+            onClick={handleReplayTour}
+            className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-800"
+          >
+            How to use
+          </button>
+        </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {lesson.letters.map((letter, idx) => {
             const isActive = idx === currentIdx;
@@ -497,7 +613,12 @@ function InteractiveLessonView({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
+        <div
+          ref={mirrorPanelRef}
+          className={`rounded-2xl border border-slate-200 bg-white p-4 md:p-5 ${
+            isMirrorPanelTourStep ? tourCardHighlightClass : ''
+          }`}
+        >
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">Your Mirror</h3>
             <span className="text-[11px] text-slate-500">
@@ -516,7 +637,12 @@ function InteractiveLessonView({
         </div>
 
         <aside className="space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
+          <div
+            ref={guidePanelRef}
+            className={`rounded-2xl border border-slate-200 bg-white p-4 md:p-5 ${
+              isGuidePanelTourStep ? tourCardHighlightClass : ''
+            }`}
+          >
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold">Guide</h3>
@@ -640,38 +766,36 @@ function InteractiveLessonView({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5 text-xs text-slate-600 space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                Instructions and feedback
-              </p>
-              <button
-                type="button"
-                onClick={handleReplayTour}
-                className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-800"
-              >
-                How to use
-              </button>
-            </div>
-            <p>1. Match the guide handshape for the target letter.</p>
-            <p>2. Keep your hand steady so confidence stays high.</p>
-            <p>3. Recognition only works when your handshape is clear and stable.</p>
-            <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700">
-              {feedbackMessage}
-            </p>
-            {letterNote && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700">
-                {letterNote}
-              </div>
-            )}
-          </div>
         </aside>
       </div>
 
       {isTourVisible && (
-        <div className="pointer-events-none fixed inset-x-4 bottom-4 z-40 flex justify-center">
-          <div className="pointer-events-auto w-full max-w-md rounded-2xl border border-blue-200 bg-white p-4 shadow-xl">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-blue-600">
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none fixed inset-0 z-30 bg-slate-900/45"
+          />
+          <div
+            ref={tourPopoverRef}
+            className="pointer-events-auto fixed z-50 w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-amber-200 bg-white p-4 shadow-xl shadow-slate-900/25"
+            style={
+              tourPopoverPosition
+                ? {
+                    top: tourPopoverPosition.top,
+                    left: tourPopoverPosition.left,
+                  }
+                : { top: 16, left: 16 }
+            }
+          >
+            <div
+              aria-hidden="true"
+              className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border border-amber-200 bg-white ${
+                tourPopoverPlacement === 'below'
+                  ? '-top-1.5 border-r-0 border-b-0'
+                  : '-bottom-1.5 border-l-0 border-t-0'
+              }`}
+            />
+            <p className="text-[11px] uppercase tracking-[0.2em] text-amber-700">
               How to use · Step {tourStep + 1}/{INTERACTIVE_LESSON_TOUR_STEPS.length}
             </p>
             <p className="mt-2 text-sm font-semibold text-slate-900">
@@ -722,7 +846,7 @@ function InteractiveLessonView({
               )}
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
@@ -732,10 +856,14 @@ function PracticeGymView({
   letters,
   isCompleted,
   onComplete,
+  practiceTourVersionCompleted,
+  onCompletePracticeTour,
 }: {
   letters: string[];
   isCompleted: boolean;
   onComplete: () => void;
+  practiceTourVersionCompleted: number | null;
+  onCompletePracticeTour: (version?: number) => Promise<void>;
 }) {
   const [targetLetter, setTargetLetter] = useState<string>(letters[0]);
   const [practiceMode, setPracticeMode] = useState<'sequential' | 'random'>(
@@ -745,10 +873,57 @@ function PracticeGymView({
   const [successFlash, setSuccessFlash] = useState(false);
   const [isHolding, setIsHolding] = useState(false);
   const [totalSuccessCount, setTotalSuccessCount] = useState(0);
+  const [practiceTourOpen, setPracticeTourOpen] = useState(false);
+  const [practiceTourStep, setPracticeTourStep] = useState(0);
+  const [practiceTourDismissedThisMount, setPracticeTourDismissedThisMount] =
+    useState(false);
+  const [practiceTourPopoverPosition, setPracticeTourPopoverPosition] =
+    useState<{
+      top: number;
+      left: number;
+    } | null>(null);
+  const [practiceTourPopoverPlacement, setPracticeTourPopoverPlacement] =
+    useState<'above' | 'below'>('below');
   const holdStartRef = useRef<number | null>(null);
   const lastHitRef = useRef<number | null>(null);
   const successLockRef = useRef(false);
   const flashTimeoutRef = useRef<number | null>(null);
+  const practiceTopControlsRef = useRef<HTMLDivElement | null>(null);
+  const practiceLetterSelectorRef = useRef<HTMLDivElement | null>(null);
+  const practiceCameraPanelRef = useRef<HTMLDivElement | null>(null);
+  const practiceGuidePanelRef = useRef<HTMLDivElement | null>(null);
+  const practiceTourPopoverRef = useRef<HTMLDivElement | null>(null);
+
+  const PRACTICE_GYM_TOUR_STEPS = [
+    {
+      target: 'controls',
+      title: 'Practice controls',
+      message:
+        'Use these controls to switch between sequential or random practice, and show or hide the guide image.',
+    },
+    {
+      target: 'letters',
+      title: 'Target letters & progress',
+      message:
+        'Tap any letter to practice it directly. This counter tracks your progress toward 10 successful signs to complete the lesson.',
+    },
+    {
+      target: 'camera',
+      title: 'Practice camera panel',
+      message:
+        'This is the main practice area. Sign the target letter here and hold it steady for 1 second to advance.',
+    },
+    {
+      target: 'guide',
+      title: 'Guide panel',
+      message:
+        'This panel shows the reference handshape for the current target letter. Use it when you need a quick reminder.',
+    },
+  ] as const;
+  const practiceGymTourCardHighlightClass =
+    'relative z-40 ring-4 ring-amber-400 ring-offset-4 ring-offset-slate-50 border-amber-300 bg-amber-50 shadow-lg shadow-amber-300/60 animate-pulse';
+  const practiceGymTourControlHighlightClass =
+    'relative z-40 ring-4 ring-amber-400 ring-offset-2 ring-offset-white border-amber-300 bg-amber-100 shadow-md shadow-amber-300/60 animate-pulse';
 
   useEffect(() => {
     if (!isCompleted && totalSuccessCount >= 10) {
@@ -848,12 +1023,152 @@ function PracticeGymView({
         ? 0.3
         : targetLetter === 'S'
           ? 0.4
-          : 0.45
+        : 0.45
       : 0.5;
+
+  const autoOpenPracticeTour =
+    practiceTourVersionCompleted != null &&
+    practiceTourVersionCompleted < MODULE1_PRACTICE_TOUR_VERSION &&
+    !practiceTourDismissedThisMount;
+  const isPracticeTourVisible = practiceTourOpen || autoOpenPracticeTour;
+  const practiceTourLastStep = PRACTICE_GYM_TOUR_STEPS.length - 1;
+  const currentPracticeTourStep =
+    PRACTICE_GYM_TOUR_STEPS[practiceTourStep] ??
+    PRACTICE_GYM_TOUR_STEPS[PRACTICE_GYM_TOUR_STEPS.length - 1];
+
+  const isPracticeControlsTourStep =
+    isPracticeTourVisible && currentPracticeTourStep.target === 'controls';
+  const isPracticeLettersTourStep =
+    isPracticeTourVisible && currentPracticeTourStep.target === 'letters';
+  const isPracticeCameraTourStep =
+    isPracticeTourVisible && currentPracticeTourStep.target === 'camera';
+  const isPracticeGuideTourStep =
+    isPracticeTourVisible && currentPracticeTourStep.target === 'guide';
+
+  useEffect(() => {
+    if (!isPracticeTourVisible) return;
+    const targetElement =
+      currentPracticeTourStep.target === 'controls'
+        ? practiceTopControlsRef.current
+        : currentPracticeTourStep.target === 'letters'
+          ? practiceLetterSelectorRef.current
+          : currentPracticeTourStep.target === 'camera'
+            ? practiceCameraPanelRef.current
+            : currentPracticeTourStep.target === 'guide'
+              ? practiceGuidePanelRef.current
+              : null;
+    targetElement?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+      inline: 'nearest',
+    });
+  }, [isPracticeTourVisible, practiceTourStep, currentPracticeTourStep.target]);
+
+  useEffect(() => {
+    if (!isPracticeTourVisible) return;
+
+    let frameId: number | null = null;
+
+    const schedulePositionUpdate = () => {
+      if (frameId != null) {
+        cancelAnimationFrame(frameId);
+      }
+
+      frameId = requestAnimationFrame(() => {
+        const target =
+          currentPracticeTourStep.target === 'controls'
+            ? practiceTopControlsRef.current
+            : currentPracticeTourStep.target === 'letters'
+              ? practiceLetterSelectorRef.current
+              : currentPracticeTourStep.target === 'camera'
+                ? practiceCameraPanelRef.current
+                : currentPracticeTourStep.target === 'guide'
+                  ? practiceGuidePanelRef.current
+                  : null;
+        const popover = practiceTourPopoverRef.current;
+        if (!target || !popover) return;
+
+        const margin = 12;
+        const targetRect = target.getBoundingClientRect();
+        const popoverRect = popover.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        let placement: 'above' | 'below' = 'below';
+        let top = targetRect.bottom + margin;
+
+        if (top + popoverRect.height + margin > viewportHeight) {
+          placement = 'above';
+          top = targetRect.top - popoverRect.height - margin;
+        }
+
+        if (top < margin) {
+          placement = 'below';
+          top = Math.max(margin, targetRect.bottom + margin);
+        }
+
+        const centeredLeft =
+          targetRect.left + targetRect.width / 2 - popoverRect.width / 2;
+        const left = Math.min(
+          Math.max(margin, centeredLeft),
+          viewportWidth - popoverRect.width - margin,
+        );
+
+        setPracticeTourPopoverPlacement(placement);
+        setPracticeTourPopoverPosition({ top, left });
+      });
+    };
+
+    schedulePositionUpdate();
+    window.addEventListener('resize', schedulePositionUpdate);
+    document.addEventListener('scroll', schedulePositionUpdate, true);
+
+    return () => {
+      if (frameId != null) {
+        cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener('resize', schedulePositionUpdate);
+      document.removeEventListener('scroll', schedulePositionUpdate, true);
+    };
+  }, [
+    isPracticeTourVisible,
+    practiceTourStep,
+    currentPracticeTourStep.target,
+  ]);
+
+  async function dismissPracticeTour() {
+    setPracticeTourOpen(false);
+    setPracticeTourDismissedThisMount(true);
+    try {
+      await onCompletePracticeTour(MODULE1_PRACTICE_TOUR_VERSION);
+    } catch (error) {
+      console.error('Module 1 practice tour completion failed', error);
+    }
+  }
+
+  function openPracticeTour() {
+    setShowHint(true);
+    setPracticeTourStep(0);
+    setPracticeTourOpen(true);
+  }
+
+  function advancePracticeTour() {
+    const nextStep = Math.min(practiceTourLastStep, practiceTourStep + 1);
+    const nextTarget = PRACTICE_GYM_TOUR_STEPS[nextStep]?.target;
+    if (nextTarget === 'guide') {
+      setShowHint(true);
+    }
+    setPracticeTourStep(nextStep);
+  }
 
   return (
     <div className="relative">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
+      <div
+        ref={practiceTopControlsRef}
+        className={`rounded-2xl border border-slate-200 bg-white p-4 md:p-5 ${
+          isPracticeControlsTourStep ? practiceGymTourCardHighlightClass : ''
+        }`}
+      >
         <div className="flex flex-col gap-3 border-b border-slate-100 pb-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -877,16 +1192,25 @@ function PracticeGymView({
                 ))}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowHint((prev) => !prev)}
-              className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300"
-            >
-              {showHint ? 'Hide guide' : 'Show guide'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={openPracticeTour}
+                className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800"
+              >
+                How to use
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div
+            ref={practiceLetterSelectorRef}
+            className={`flex flex-wrap items-center gap-2 rounded-xl ${
+              isPracticeLettersTourStep
+                ? practiceGymTourControlHighlightClass
+                : ''
+            }`}
+          >
             <div className="flex flex-wrap gap-2">
               {letters.map((letter) => {
                 const active = letter === targetLetter;
@@ -914,18 +1238,21 @@ function PracticeGymView({
       </div>
 
       <div
-        className={`mt-6 grid gap-6 ${
-          showHint ? 'lg:grid-cols-3' : 'grid-cols-1'
-        }`}
+        className="mt-6 grid gap-6 lg:grid-cols-3"
       >
-        <div className={showHint ? 'lg:col-span-2' : ''}>
+        <div className="lg:col-span-2">
           <div className="space-y-2">
             <p className="text-xs text-slate-500">
               Hold the target letter for 1 second to advance. Finish 10 signs to
               complete the lesson.
             </p>
           </div>
-          <div className="mt-4 relative">
+          <div
+            ref={practiceCameraPanelRef}
+            className={`mt-4 relative rounded-2xl ${
+              isPracticeCameraTourStep ? practiceGymTourCardHighlightClass : ''
+            }`}
+          >
             <div
               className={`relative rounded-2xl ${
                 isHolding
@@ -959,23 +1286,141 @@ function PracticeGymView({
           </div>
         </div>
 
-        {showHint && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
-              Guide: Sign {targetLetter}
-            </p>
-            <img
-              src={`/images/${targetLetter}.png`}
-              alt="Guide"
-              className="mt-3 w-full rounded-lg"
-              style={{ transform: 'scaleX(-1)' }}
+        <div
+          ref={practiceGuidePanelRef}
+          className={`rounded-2xl border p-4 md:p-5 ${
+            isPracticeGuideTourStep
+              ? practiceGymTourCardHighlightClass
+              : showHint
+                ? 'border-slate-200 bg-white'
+                : 'border-slate-300 bg-slate-100'
+          }`}
+        >
+          {showHint ? (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                  Guide: Sign {targetLetter}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowHint(false)}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                >
+                  Hide guide
+                </button>
+              </div>
+              <img
+                src={`/images/${targetLetter}.png`}
+                alt="Guide"
+                className="mt-3 w-full rounded-lg"
+                style={{ transform: 'scaleX(-1)' }}
+              />
+              <div className="mt-4 text-xs text-slate-500">
+                Keep your wrist relaxed and fingers visible.
+              </div>
+            </>
+          ) : (
+            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-200/70 px-6 py-8 text-center">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                Guide hidden
+              </p>
+              <p className="mt-3 max-w-xs text-sm text-slate-600">
+                Show the guide again whenever you want the reference image for
+                sign {targetLetter}.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowHint(true)}
+                className="mt-6 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                Show guide
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {isPracticeTourVisible && (
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none fixed inset-0 z-30 bg-slate-900/45"
+          />
+          <div
+            ref={practiceTourPopoverRef}
+            className="pointer-events-auto fixed z-50 w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-amber-200 bg-white p-4 shadow-xl shadow-slate-900/25"
+            style={
+              practiceTourPopoverPosition
+                ? {
+                    top: practiceTourPopoverPosition.top,
+                    left: practiceTourPopoverPosition.left,
+                  }
+                : { top: 16, left: 16 }
+            }
+          >
+            <div
+              aria-hidden="true"
+              className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border border-amber-200 bg-white ${
+                practiceTourPopoverPlacement === 'below'
+                  ? '-top-1.5 border-r-0 border-b-0'
+                  : '-bottom-1.5 border-l-0 border-t-0'
+              }`}
             />
-            <div className="mt-4 text-xs text-slate-500">
-              Keep your wrist relaxed and fingers visible.
+            <p className="text-[11px] uppercase tracking-[0.2em] text-amber-700">
+              Practice tour · Step {practiceTourStep + 1}/
+              {PRACTICE_GYM_TOUR_STEPS.length}
+            </p>
+            <p className="mt-2 text-sm font-semibold text-slate-900">
+              {currentPracticeTourStep.title}
+            </p>
+            <p className="mt-1 text-xs text-slate-600">
+              {currentPracticeTourStep.message}
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  void dismissPracticeTour();
+                }}
+                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-800"
+              >
+                Skip
+              </button>
+              {practiceTourStep > 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPracticeTourStep((prev) => Math.max(0, prev - 1))
+                  }
+                  className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-800"
+                >
+                  Back
+                </button>
+              )}
+              {practiceTourStep < practiceTourLastStep ? (
+                <button
+                  type="button"
+                  onClick={advancePracticeTour}
+                  className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-500"
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void dismissPracticeTour();
+                  }}
+                  className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-500"
+                >
+                  Done
+                </button>
+              )}
             </div>
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
