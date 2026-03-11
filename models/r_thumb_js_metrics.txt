@@ -1,0 +1,20 @@
+Feature: thumb
+Dataset: data/samples_r_thumb_js.csv
+Model: linear svm
+
+Classes:
+["absent", "present"]
+
+Classification report:
+              precision    recall  f1-score   support
+
+      absent     1.0000    1.0000    1.0000       803
+     present     1.0000    1.0000    1.0000       849
+
+    accuracy                         1.0000      1652
+   macro avg     1.0000    1.0000    1.0000      1652
+weighted avg     1.0000    1.0000    1.0000      1652
+
+Confusion matrix:
+803 0
+0 849

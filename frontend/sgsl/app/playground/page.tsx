@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import Image from 'next/image';
 import Script from 'next/script';
 import { useRouter } from 'next/navigation';
 import StaticLetterPractice, {
   type PredictResponse,
+  type RMiniFeedback,
 } from '@/components/StaticLetterPractice';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import {
@@ -45,9 +45,21 @@ type FeedbackState = 'idle' | 'correct' | 'incorrect';
 function getFeedbackState(
   prediction: PredictResponse | null,
   targetLetter: ModuleOneLetter,
+  rMiniFeedback: RMiniFeedback | null,
 ): FeedbackState {
+  if (targetLetter === 'R') {
+    if (!rMiniFeedback || rMiniFeedback.status === 'loading') return 'idle';
+    return rMiniFeedback.status === 'pass' ? 'correct' : 'incorrect';
+  }
   if (!prediction) return 'idle';
   return prediction.letter === targetLetter ? 'correct' : 'incorrect';
+}
+
+function summarizeRMiniChecks(feedback: RMiniFeedback | null): string {
+  if (!feedback || feedback.checks.length === 0) return '--';
+  return feedback.checks
+    .map((check) => `${check.id}:${check.passed ? 'ok' : 'x'}(${check.margin.toFixed(2)})`)
+    .join(' ');
 }
 
 export default function PlaygroundPage() {
@@ -66,6 +78,8 @@ export default function PlaygroundPage() {
   const [showGuide, setShowGuide] = useState(true);
   const [currentPrediction, setCurrentPrediction] =
     useState<PredictResponse | null>(null);
+  const [currentRMiniFeedback, setCurrentRMiniFeedback] =
+    useState<RMiniFeedback | null>(null);
   const [tourOpen, setTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
   const [tourDismissedThisMount, setTourDismissedThisMount] = useState(false);
@@ -84,10 +98,16 @@ export default function PlaygroundPage() {
   const tourPopoverRef = useRef<HTMLDivElement | null>(null);
 
   const activeSign = MODULE_ONE_SIGNS[activeIndex] ?? MODULE_ONE_SIGNS[0];
-  const feedbackState = getFeedbackState(currentPrediction, activeSign.letter);
+  const isRTarget = activeSign.letter === 'R';
+  const feedbackState = getFeedbackState(
+    currentPrediction,
+    activeSign.letter,
+    currentRMiniFeedback,
+  );
   const confidenceLabel = currentPrediction
     ? `${(currentPrediction.confidence * 100).toFixed(1)}%`
     : '--';
+  const rMiniChecksSummary = summarizeRMiniChecks(currentRMiniFeedback);
   const hasGuideVideo = Boolean(activeSign.videoSrc);
   const guideTransform =
     guideOrientation === 'mirrored' ? 'scaleX(-1)' : undefined;
@@ -225,6 +245,7 @@ export default function PlaygroundPage() {
 
   function resetPracticeView() {
     setCurrentPrediction(null);
+    setCurrentRMiniFeedback(null);
     setGuidePlaying(true);
   }
 
@@ -240,19 +261,37 @@ export default function PlaygroundPage() {
         ? 'border-amber-200 bg-amber-50 text-amber-700'
         : 'border-slate-200 bg-white text-slate-600';
 
-  const feedbackTitle =
-    feedbackState === 'correct'
-      ? 'Correct'
-      : feedbackState === 'incorrect'
-        ? 'Try again'
-        : 'No sign detected';
+  let feedbackTitle: string;
+  let feedbackBody: string;
 
-  const feedbackBody =
-    feedbackState === 'correct'
-      ? `The model currently matches ${activeSign.label}. Keep that handshape steady if you want to reinforce it.`
-      : feedbackState === 'incorrect'
-        ? `The model is reading ${currentPrediction?.letter ?? '--'} instead of ${activeSign.label}. Compare against the guide and try again.`
-        : `Hold the ${activeSign.label} handshape in frame to get live recognition feedback.`;
+  if (feedbackState === 'idle') {
+    feedbackTitle = 'No sign detected';
+    feedbackBody = `Hold the ${activeSign.label} handshape in frame to get live recognition feedback.`;
+  } else if (!isRTarget) {
+    feedbackTitle = feedbackState === 'correct' ? 'Correct' : 'Try again';
+    feedbackBody =
+      feedbackState === 'correct'
+        ? `The model currently matches ${activeSign.label}. Keep that handshape steady if you want to reinforce it.`
+        : `The model is reading ${currentPrediction?.letter ?? '--'} instead of ${activeSign.label}. Compare against the guide and try again.`;
+  } else if (!currentRMiniFeedback || currentRMiniFeedback.status === 'loading') {
+    feedbackTitle = 'Checking R details';
+    feedbackBody = 'Evaluating vertical/cross/tuck/thumb mini checks...';
+  } else if (currentRMiniFeedback.status === 'models_missing') {
+    feedbackTitle = 'R mini model missing';
+    feedbackBody =
+      currentRMiniFeedback.missingChecks.length > 0
+        ? `Missing JS mini model(s): ${currentRMiniFeedback.missingChecks.join(', ')}. Train/export them and place in frontend/sgsl/public/models.`
+        : 'Some JS mini models are missing. Train/export them and place in frontend/sgsl/public/models.';
+  } else if (currentRMiniFeedback.status === 'fail') {
+    feedbackTitle = `Adjust ${currentRMiniFeedback.failingLabel ?? 'R'}`;
+    feedbackBody =
+      currentRMiniFeedback.fix ??
+      'R was detected, but one mini check failed. Compare against the guide and adjust.';
+  } else {
+    feedbackTitle = 'Correct';
+    feedbackBody =
+      'R is detected and all JS mini checks pass at margin ≥ 0.20. Keep the handshape steady.';
+  }
 
   if (loading || !profile || !hasCompletedOnboarding(profile)) {
     return (
@@ -363,8 +402,13 @@ export default function PlaygroundPage() {
                   }`}
                 >
                   <StaticLetterPractice
+                    targetLetter={activeSign.letter}
                     onPredictionChange={setCurrentPrediction}
+                    onRMiniFeedbackChange={setCurrentRMiniFeedback}
                     showPredictionPanel={false}
+                    enableRMiniChecks={isRTarget}
+                    disableStaticModel={isRTarget}
+                    rMiniMargin={0.2}
                   />
                 </div>
               </div>
@@ -408,6 +452,16 @@ export default function PlaygroundPage() {
                         {confidenceLabel}
                       </p>
                     </div>
+                    {isRTarget && (
+                      <div className="rounded-2xl border border-current/15 bg-white/60 p-3 col-span-2">
+                        <p className="uppercase tracking-[0.16em] opacity-70">
+                          R Mini Checks (margin 0.20)
+                        </p>
+                        <p className="mt-2 text-sm font-semibold tracking-wide">
+                          {rMiniChecksSummary}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
