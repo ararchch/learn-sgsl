@@ -1,6 +1,5 @@
 import argparse
 import json
-from collections import Counter, deque
 from pathlib import Path
 
 import cv2
@@ -9,10 +8,6 @@ import mediapipe as mp
 import numpy as np
 
 MODELS_DIR = Path("models")
-
-PRIMARY_MODEL_PATH = MODELS_DIR / "hand_static.joblib"
-PRIMARY_CLASSES_PATH = MODELS_DIR / "class_names.json"
-
 PALM_LANDMARKS = [0, 5, 9, 13, 17]
 
 CHECK_CONFIGS = [
@@ -50,8 +45,6 @@ CHECK_CONFIGS = [
     },
 ]
 
-FALLBACK_FIX = "Adjust overall R handshape and hold steady."
-
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 mp_styles = mp.solutions.drawing_styles
@@ -63,19 +56,6 @@ def open_camera(index: int):
         return cap
     cap.release()
     return cv2.VideoCapture(index)
-
-
-def softmax_np(x: np.ndarray) -> np.ndarray:
-    exps = np.exp(x - np.max(x))
-    return exps / np.sum(exps)
-
-
-def sigmoid(x: float) -> float:
-    if x >= 0:
-        z = np.exp(-x)
-        return float(1.0 / (1.0 + z))
-    z = np.exp(x)
-    return float(z / (1.0 + z))
 
 
 def build_subset_connections(subset_indices):
@@ -98,26 +78,7 @@ def draw_subset_highlight(frame, hand_landmarks, subset_indices, subset_connecti
         cv2.circle(frame, (x, y), 5, (0, 60, 255), -1)
 
 
-def landmarks_to_primary_feature(hand_landmarks):
-    """
-    Primary static model feature format from infer.py:
-    63-D (21x3), wrist-centered and max-distance scaled.
-    """
-    pts = np.array([[lm.x, lm.y, lm.z] for lm in hand_landmarks.landmark], dtype=np.float32)
-    wrist = pts[0].copy()
-    pts -= wrist
-    scale = np.linalg.norm(pts, axis=1).max()
-    if scale < 1e-6:
-        scale = 1.0
-    pts /= scale
-    return pts.flatten()
-
-
 def extract_subset_feature(hand_landmarks, subset_indices):
-    """
-    Mini-model feature format:
-    subset 3D landmarks, palm-centered and palm-width scaled.
-    """
     pts = np.array([[lm.x, lm.y, lm.z] for lm in hand_landmarks.landmark], dtype=np.float32)
     palm_center = pts[PALM_LANDMARKS].mean(axis=0, keepdims=True)
     pts -= palm_center
@@ -132,41 +93,12 @@ def extract_subset_feature(hand_landmarks, subset_indices):
     return pts[subset_indices].flatten()
 
 
-def predict_with_margin(model, x: np.ndarray):
-    """
-    Returns (pred_idx, confidence, margin, probs).
-    Works for both binary and multiclass classifiers.
-    """
-    if hasattr(model, "decision_function"):
-        dec = np.asarray(model.decision_function(x))
-        if dec.ndim == 1 and dec.size == 1:
-            score = float(dec[0])
-            probs = np.array([1.0 - sigmoid(score), sigmoid(score)], dtype=np.float32)
-            pred_idx = int(score >= 0.0)
-            margin = abs(score)
-            conf = float(probs[pred_idx])
-            return pred_idx, conf, margin, probs
-
-        dec = dec.ravel()
-        probs = softmax_np(dec)
-        pred_idx = int(np.argmax(dec))
-        if dec.size >= 2:
-            top2 = np.sort(dec)[-2:]
-            margin = float(top2[-1] - top2[-2])
-        else:
-            margin = abs(float(dec[0]))
-        conf = float(probs[pred_idx])
-        return pred_idx, conf, margin, probs
-
-    probs = model.predict_proba(x).ravel()
-    pred_idx = int(np.argmax(probs))
-    if probs.size >= 2:
-        top2 = np.sort(probs)[-2:]
-        margin = float(top2[-1] - top2[-2])
-    else:
-        margin = float(probs[0])
-    conf = float(probs[pred_idx])
-    return pred_idx, conf, margin, probs
+def sigmoid(x: float) -> float:
+    if x >= 0:
+        z = np.exp(-x)
+        return float(1.0 / (1.0 + z))
+    z = np.exp(x)
+    return float(z / (1.0 + z))
 
 
 def load_json_list(path: Path):
@@ -176,29 +108,22 @@ def load_json_list(path: Path):
     return data
 
 
-def load_artifacts():
-    required_paths = [PRIMARY_MODEL_PATH, PRIMARY_CLASSES_PATH]
-    for cfg in CHECK_CONFIGS:
-        required_paths.extend([cfg["model_path"], cfg["classes_path"]])
-
-    for p in required_paths:
-        if not p.exists():
-            raise FileNotFoundError(f"Missing artifact: {p}")
-
-    primary_model = joblib.load(PRIMARY_MODEL_PATH)
-    primary_classes = load_json_list(PRIMARY_CLASSES_PATH)
-    if "R" not in primary_classes:
-        raise ValueError(f"Primary classes missing 'R': {primary_classes}")
-
+def load_checks():
     checks = []
     for cfg in CHECK_CONFIGS:
+        if not cfg["model_path"].exists() or not cfg["classes_path"].exists():
+            raise FileNotFoundError(
+                f"Missing artifacts for {cfg['id']}: "
+                f"{cfg['model_path']} and/or {cfg['classes_path']}"
+            )
+
         model = joblib.load(cfg["model_path"])
         classes = load_json_list(cfg["classes_path"])
         if "present" not in classes or "absent" not in classes:
             raise ValueError(
-                f"Mini model classes for {cfg['id']} must contain "
-                f"'absent' and 'present', found: {classes}"
+                f"Classes for {cfg['id']} must contain 'absent' and 'present', found: {classes}"
             )
+
         checks.append(
             {
                 "id": cfg["id"],
@@ -211,21 +136,62 @@ def load_artifacts():
             }
         )
 
-    return primary_model, primary_classes, checks
+    return checks
+
+
+def predict_binary_check(model, class_names, x):
+    """
+    Returns:
+    - pred_label: "present"/"absent"
+    - margin: absolute decision margin (or probability gap fallback)
+    - present_score: estimated score/probability for "present"
+    """
+    pred_idx = int(model.predict(x)[0])
+    pred_label = class_names[pred_idx]
+
+    present_idx = class_names.index("present")
+    margin = 0.0
+    present_score = 0.0
+
+    if hasattr(model, "decision_function"):
+        dec = np.asarray(model.decision_function(x))
+        if dec.ndim == 1 and dec.size == 1:
+            score = float(dec[0])
+            margin = abs(score)
+            # score>0 corresponds to class index 1 in this training setup
+            present_score = sigmoid(score) if present_idx == 1 else (1.0 - sigmoid(score))
+        else:
+            dec = dec.ravel()
+            if dec.size >= 2:
+                top2 = np.sort(dec)[-2:]
+                margin = float(top2[-1] - top2[-2])
+                exps = np.exp(dec - np.max(dec))
+                probs = exps / np.sum(exps)
+                present_score = float(probs[present_idx])
+            else:
+                margin = abs(float(dec[0]))
+                present_score = float(dec[0])
+    elif hasattr(model, "predict_proba"):
+        probs = model.predict_proba(x).ravel()
+        present_score = float(probs[present_idx])
+        if probs.size >= 2:
+            top2 = np.sort(probs)[-2:]
+            margin = float(top2[-1] - top2[-2])
+        else:
+            margin = float(probs[0])
+
+    return pred_label, margin, present_score
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--camera", type=int, default=0, help="Camera index")
-    ap.add_argument("--window", type=int, default=7, help="Primary smoothing window")
-    ap.add_argument("--margin", type=float, default=0.25, help="Primary margin threshold")
-    ap.add_argument("--mini-margin", type=float, default=0.25, help="Mini-check margin threshold")
+    ap.add_argument("--mini-margin", type=float, default=0.1, help="Mini-check margin threshold")
     ap.add_argument("--min-det", type=float, default=0.6, help="MediaPipe min_detection_confidence")
     ap.add_argument("--min-track", type=float, default=0.6, help="MediaPipe min_tracking_confidence")
     args = ap.parse_args()
 
-    primary_model, primary_classes, checks = load_artifacts()
-    vote_buf = deque(maxlen=max(1, args.window))
+    checks = load_checks()
 
     cap = open_camera(args.camera)
     if not cap.isOpened():
@@ -254,14 +220,10 @@ def main():
             res = hands.process(rgb)
             rgb.flags.writeable = True
 
-            primary_current = "-"
-            primary_stable = "-"
-            primary_conf = 0.0
-            primary_margin = 0.0
-
             status_text = "No hand detected"
             stage_text = "-"
             fix_text = "Show one hand clearly in frame."
+            details_text = "vertical:- cross:- tuck:- thumb:-"
             failing_check = None
 
             if res.multi_hand_landmarks:
@@ -274,45 +236,29 @@ def main():
                     mp_styles.get_default_hand_connections_style(),
                 )
 
-                # 1) Primary model first
-                x_primary = landmarks_to_primary_feature(hand_lms).reshape(1, -1)
-                p_idx, p_conf, p_margin, _ = predict_with_margin(primary_model, x_primary)
-                primary_current = primary_classes[p_idx]
-                primary_conf = p_conf
-                primary_margin = p_margin
+                details = []
 
-                vote_buf.append(primary_current)
-                if len(vote_buf) == vote_buf.maxlen and primary_margin >= args.margin:
-                    primary_stable = Counter(vote_buf).most_common(1)[0][0]
+                for check in checks:
+                    x = extract_subset_feature(hand_lms, check["landmarks"]).reshape(1, -1)
+                    pred_label, margin, present_score = predict_binary_check(
+                        check["model"], check["classes"], x
+                    )
+                    passed = pred_label == "present" and margin >= args.mini_margin
+                    details.append(f"{check['id']}:{'ok' if passed else 'x'}")
 
-                primary_is_r = (
-                    (primary_current == "R" and primary_margin >= args.margin)
-                    or primary_stable == "R"
-                )
+                    if not passed and failing_check is None:
+                        failing_check = check
+                        stage_text = check["label"]
+                        fix_text = check["fix"]
 
-                if primary_is_r:
-                    status_text = "R correct"
+                details_text = " ".join(details)
+
+                if failing_check is None:
+                    status_text = "R correct (all 4 checks pass)"
                     stage_text = "Pass"
                     fix_text = "Good job. Hold steady."
                 else:
-                    # 2) Ordered mini checks: vertical -> cross -> tuck -> thumb
                     status_text = "R needs correction"
-                    stage_text = "All checks pass"
-                    fix_text = FALLBACK_FIX
-
-                    for check in checks:
-                        x_mini = extract_subset_feature(hand_lms, check["landmarks"]).reshape(1, -1)
-                        m_idx, _, m_margin, _ = predict_with_margin(check["model"], x_mini)
-                        m_pred = check["classes"][m_idx]
-                        passed = m_pred == "present" and m_margin >= args.mini_margin
-
-                        if not passed:
-                            stage_text = check["label"]
-                            fix_text = check["fix"]
-                            failing_check = check
-                            break
-
-                if failing_check is not None:
                     draw_subset_highlight(
                         frame,
                         hand_lms,
@@ -320,38 +266,20 @@ def main():
                         failing_check["connections"],
                     )
 
-            cv2.rectangle(frame, (0, 0), (w, 155), (0, 0, 0), -1)
-            cv2.putText(
-                frame,
-                f"Primary current: {primary_current} | stable: {primary_stable}",
-                (10, 28),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.62,
-                (255, 255, 255),
-                1,
-            )
-            cv2.putText(
-                frame,
-                f"Primary conf: {primary_conf*100:.1f}% | margin: {primary_margin:.3f}",
-                (10, 54),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.62,
-                (255, 255, 255),
-                1,
-            )
+            cv2.rectangle(frame, (0, 0), (w, 135), (0, 0, 0), -1)
             cv2.putText(
                 frame,
                 f"Status: {status_text}",
-                (10, 82),
+                (10, 28),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.68,
-                (120, 255, 120) if status_text == "R correct" else (255, 255, 255),
+                0.66,
+                (120, 255, 120) if "correct" in status_text.lower() else (255, 255, 255),
                 2,
             )
             cv2.putText(
                 frame,
                 f"Stage: {stage_text}",
-                (10, 108),
+                (10, 54),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.62,
                 (255, 220, 130),
@@ -360,10 +288,19 @@ def main():
             cv2.putText(
                 frame,
                 f"Fix: {fix_text}",
-                (10, 134),
+                (10, 80),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.62,
+                0.6,
                 (255, 255, 255),
+                1,
+            )
+            cv2.putText(
+                frame,
+                details_text,
+                (10, 106),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.54,
+                (180, 180, 180),
                 1,
             )
             cv2.putText(
@@ -376,7 +313,7 @@ def main():
                 1,
             )
 
-            cv2.imshow("Infer with Feedback - R", frame)
+            cv2.imshow("Infer with Feedback - R (Checks Only)", frame)
             if (cv2.waitKey(1) & 0xFF) in (ord("q"), ord("Q")):
                 break
 
