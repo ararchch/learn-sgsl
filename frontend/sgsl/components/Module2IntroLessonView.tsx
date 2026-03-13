@@ -167,8 +167,8 @@ export default function Module2IntroLessonView({
                   </p>
                   <p className="mt-2 text-slate-600">
                     Spell the word in order. Hold each letter until it is
-                    accepted, then reset and move on. Use Exit if you want to
-                    restart a word.
+                    accepted, then reset and move on. If recognition drifts,
+                    pause briefly and resume from the current letter.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -177,8 +177,8 @@ export default function Module2IntroLessonView({
                   </p>
                   <p className="mt-2 text-slate-600">
                     Accuracy comes first. If you rush, you’ll get extra letters
-                    or skips. Keep your rhythm steady, and use Exit if you need
-                    to end the run early.
+                    or skips. Keep your rhythm steady and let the timer score
+                    each word naturally.
                   </p>
                 </div>
               </div>

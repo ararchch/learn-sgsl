@@ -690,7 +690,6 @@ function LFingerspellingCheck({
   onPassed: () => void;
 }) {
   const completedRef = useRef(false);
-  const [attemptKey, setAttemptKey] = useState(0);
 
   return (
     <div className="space-y-4">
@@ -711,7 +710,6 @@ function LFingerspellingCheck({
       <div className="grid items-stretch gap-4 lg:grid-cols-1">
         <div className="h-full rounded-2xl border border-slate-200 bg-white p-4">
           <FingerspellingPractice
-            key={`onboarding-llll-${attemptKey}`}
             mode="practice"
             word="LLLL"
             minConfidence={0.4}
@@ -720,9 +718,6 @@ function LFingerspellingCheck({
               if (completedRef.current) return;
               completedRef.current = true;
               onPassed();
-            }}
-            onExit={() => {
-              setAttemptKey((prev) => prev + 1);
             }}
           />
         </div>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import MediaPipeScripts from '@/components/MediaPipeScripts';
 import { useRouter } from 'next/navigation';
+import GuideVisibilityMask from '@/components/GuideVisibilityMask';
 import StaticLetterPractice from '@/components/StaticLetterPractice';
 import ModuleNav from '@/components/ModuleNav';
 import IntroLessonView from '@/components/IntroLessonView';
@@ -1266,53 +1267,37 @@ function PracticeGymView({
           className={`rounded-2xl border p-4 md:p-5 ${
             isPracticeGuideTourStep
               ? practiceGymTourCardHighlightClass
-              : showHint
-                ? 'border-slate-200 bg-white'
-                : 'border-slate-300 bg-slate-100'
+              : 'border-slate-200 bg-white'
           }`}
         >
-          {showHint ? (
-            <>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                  Guide: Sign {targetLetter}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowHint(false)}
-                  className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-                >
-                  Hide guide
-                </button>
-              </div>
-              <img
-                src={`/images/${targetLetter}.png`}
-                alt="Guide"
-                className="mt-3 w-full rounded-lg"
-                style={{ transform: 'scaleX(-1)' }}
-              />
-              <div className="mt-4 text-xs text-slate-500">
-                Keep your wrist relaxed and fingers visible.
-              </div>
-            </>
-          ) : (
-            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-200/70 px-6 py-8 text-center">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                Guide hidden
-              </p>
-              <p className="mt-3 max-w-xs text-sm text-slate-600">
-                Show the guide again whenever you want the reference image for
-                sign {targetLetter}.
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowHint(true)}
-                className="mt-6 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-              >
-                Show guide
-              </button>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+              Guide: Sign {targetLetter}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowHint((prev) => !prev)}
+              className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+            >
+              {showHint ? 'Hide guide' : 'Show guide'}
+            </button>
+          </div>
+
+          <GuideVisibilityMask
+            hidden={!showHint}
+            className="mt-3"
+            description={`Reveal the guide whenever you want the reference image for sign ${targetLetter}.`}
+          >
+            <img
+              src={`/images/${targetLetter}.png`}
+              alt="Guide"
+              className="w-full rounded-lg"
+              style={{ transform: 'scaleX(-1)' }}
+            />
+            <div className="mt-4 text-xs text-slate-500">
+              Keep your wrist relaxed and fingers visible.
             </div>
-          )}
+          </GuideVisibilityMask>
         </div>
       </div>
 

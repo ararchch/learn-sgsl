@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import MediaPipeScripts from '@/components/MediaPipeScripts';
+import GuideVisibilityMask from '@/components/GuideVisibilityMask';
 import StaticLetterPractice, {
   type PredictResponse,
   type RMiniFeedback,
@@ -457,81 +458,84 @@ export default function PlaygroundPage() {
               className={`rounded-2xl border p-5 ${
                 isTourVisible && currentTourStep.target === 'guide'
                   ? cardHighlightClass
-                  : showGuide
-                    ? 'border-slate-200 bg-white'
-                    : 'border-slate-300 bg-slate-100'
+                  : 'border-slate-200 bg-white'
               }`}
             >
-              {showGuide ? (
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-2">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                      Guide
-                    </p>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <h2 className="text-sm font-semibold text-slate-900">
-                        Reference for sign {activeSign.label}
-                      </h2>
-                      <button
-                        type="button"
-                        onClick={() => setShowGuide(false)}
-                        className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-                      >
-                        Hide guide
-                      </button>
-                    </div>
-                    <p className="text-sm text-slate-500">{activeSign.tip}</p>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                    Guide
+                  </p>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h2 className="text-sm font-semibold text-slate-900">
+                      Reference for sign {activeSign.label}
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => setShowGuide((prev) => !prev)}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                    >
+                      {showGuide ? 'Hide guide' : 'Show guide'}
+                    </button>
                   </div>
+                  <p className="text-sm text-slate-500">{activeSign.tip}</p>
+                </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-[11px]">
-                      <button
-                        type="button"
-                        onClick={() => setGuideView('video')}
-                        className={`rounded-full px-3 py-1 font-semibold ${
-                          guideView === 'video'
-                            ? 'bg-white text-slate-900'
-                            : 'text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        Video
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setGuideView('image')}
-                        className={`rounded-full px-3 py-1 font-semibold ${
-                          guideView === 'image'
-                            ? 'bg-white text-slate-900'
-                            : 'text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        Image
-                      </button>
-                    </div>
+                <GuideVisibilityMask
+                  hidden={!showGuide}
+                  description={`Reveal the guide whenever you want the reference image or video for sign ${activeSign.label}.`}
+                >
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setGuideView('video')}
+                          className={`rounded-full px-3 py-1 font-semibold ${
+                            guideView === 'video'
+                              ? 'bg-white text-slate-900'
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          Video
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGuideView('image')}
+                          className={`rounded-full px-3 py-1 font-semibold ${
+                            guideView === 'image'
+                              ? 'bg-white text-slate-900'
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          Image
+                        </button>
+                      </div>
 
-                    <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-[11px]">
-                      <button
-                        type="button"
-                        onClick={() => setGuideOrientation('normal')}
-                        className={`rounded-full px-3 py-1 font-semibold ${
-                          guideOrientation === 'normal'
-                            ? 'bg-white text-slate-900'
-                            : 'text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        Normal
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setGuideOrientation('mirrored')}
-                        className={`rounded-full px-3 py-1 font-semibold ${
-                          guideOrientation === 'mirrored'
-                            ? 'bg-white text-slate-900'
-                            : 'text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        Mirrored
-                      </button>
+                      <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setGuideOrientation('normal')}
+                          className={`rounded-full px-3 py-1 font-semibold ${
+                            guideOrientation === 'normal'
+                              ? 'bg-white text-slate-900'
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          Normal
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGuideOrientation('mirrored')}
+                          className={`rounded-full px-3 py-1 font-semibold ${
+                            guideOrientation === 'mirrored'
+                              ? 'bg-white text-slate-900'
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          Mirrored
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -603,25 +607,8 @@ export default function PlaygroundPage() {
                     Use mirrored mode if you want the guide to match your selfie
                     camera view more directly.
                   </p>
-                </div>
-              ) : (
-                <div className="flex min-h-[520px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-200/70 px-6 py-8 text-center">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                    Guide hidden
-                  </p>
-                  <p className="mt-3 max-w-xs text-sm text-slate-600">
-                    Show the guide again whenever you want the reference image
-                    or video for sign {activeSign.label}.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowGuide(true)}
-                    className="mt-6 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  >
-                    Show guide
-                  </button>
-                </div>
-              )}
+                </GuideVisibilityMask>
+              </div>
             </aside>
           </section>
         </main>

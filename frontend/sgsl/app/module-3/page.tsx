@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import DynamicSignPractice from '@/components/DynamicSignPractice';
+import GuideVisibilityMask from '@/components/GuideVisibilityMask';
 import ModuleNav from '@/components/ModuleNav';
 import { useUserProgress } from '@/hooks/useUserProgress';
 
@@ -554,11 +555,7 @@ function GuidedPracticeContent({
   const masteredCount = MODULE_THREE_WORDS.filter((w) => counts[w] >= REQUIRED_REPS).length;
 
   return (
-    <div
-      className={`grid gap-6 ${
-        showGuide ? 'lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]' : 'grid-cols-1'
-      }`}
-    >
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -588,18 +585,6 @@ function GuidedPracticeContent({
           </div>
         </div>
 
-        {!showGuide && (
-          <div className="mt-2 flex items-center justify-end">
-            <button
-              type="button"
-              onClick={() => setShowGuide(true)}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300"
-            >
-              Show guide
-            </button>
-          </div>
-        )}
-
         <div className="mt-4">
           <DynamicSignPractice
             focusWords={[...MODULE_THREE_WORDS]}
@@ -608,22 +593,27 @@ function GuidedPracticeContent({
         </div>
       </div>
 
-      {showGuide && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5 text-xs text-slate-600 space-y-4">
-          <div>
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                Guide: {WORD_GUIDES[target].label}
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowGuide(false)}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 hover:border-slate-300"
-              >
-                Hide guide
-              </button>
-            </div>
-            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5 text-xs text-slate-600">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+            Guide: {WORD_GUIDES[target].label}
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowGuide((prev) => !prev)}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 hover:border-slate-300"
+          >
+            {showGuide ? 'Hide guide' : 'Show guide'}
+          </button>
+        </div>
+
+        <GuideVisibilityMask
+          hidden={!showGuide}
+          className="mt-4"
+          description={`Reveal the guide whenever you want the reference motion for ${WORD_GUIDES[target].label}.`}
+        >
+          <div className="space-y-4">
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
               <div className="aspect-video flex items-center justify-center">
                 <img
                   src={wordGifSrc(target)}
@@ -632,39 +622,39 @@ function GuidedPracticeContent({
                 />
               </div>
             </div>
-          </div>
 
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-              Mastery targets
-            </p>
-            <div className="mt-2 space-y-2">
-              {MODULE_THREE_WORDS.map((w) => {
-                const count = counts[w];
-                const done = count >= REQUIRED_REPS;
-                return (
-                  <div key={w} className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-900">
-                      {WORD_GUIDES[w].label}
-                    </span>
-                    <span
-                      className={`text-[11px] font-semibold ${
-                        done ? 'text-emerald-600' : 'text-slate-500'
-                      }`}
-                    >
-                      {count}/{REQUIRED_REPS}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
-              Completed:{' '}
-              <span className="font-semibold text-slate-900">{masteredCount}/3</span>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                Mastery targets
+              </p>
+              <div className="mt-2 space-y-2">
+                {MODULE_THREE_WORDS.map((w) => {
+                  const count = counts[w];
+                  const done = count >= REQUIRED_REPS;
+                  return (
+                    <div key={w} className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-900">
+                        {WORD_GUIDES[w].label}
+                      </span>
+                      <span
+                        className={`text-[11px] font-semibold ${
+                          done ? 'text-emerald-600' : 'text-slate-500'
+                        }`}
+                      >
+                        {count}/{REQUIRED_REPS}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+                Completed:{' '}
+                <span className="font-semibold text-slate-900">{masteredCount}/3</span>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        </GuideVisibilityMask>
+      </div>
     </div>
   );
 }
@@ -748,11 +738,7 @@ function MixedPracticeContent({
   const totalRequired = REQUIRED_PER_WORD * MODULE_THREE_WORDS.length;
 
   return (
-    <div
-      className={`grid gap-6 ${
-        showGuide ? 'lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]' : 'grid-cols-1'
-      }`}
-    >
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -769,18 +755,6 @@ function MixedPracticeContent({
           </span>
         </div>
 
-        {!showGuide && (
-          <div className="mt-2 flex items-center justify-end">
-            <button
-              type="button"
-              onClick={() => setShowGuide(true)}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300"
-            >
-              Show guide
-            </button>
-          </div>
-        )}
-
         <div className="mt-4">
           <DynamicSignPractice
             focusWords={[...MODULE_THREE_WORDS]}
@@ -789,22 +763,27 @@ function MixedPracticeContent({
         </div>
       </div>
 
-      {showGuide && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5 text-xs text-slate-600 space-y-4">
-          <div>
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                Guide: {WORD_GUIDES[target].label}
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowGuide(false)}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 hover:border-slate-300"
-              >
-                Hide guide
-              </button>
-            </div>
-            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5 text-xs text-slate-600">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+            Guide: {WORD_GUIDES[target].label}
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowGuide((prev) => !prev)}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 hover:border-slate-300"
+          >
+            {showGuide ? 'Hide guide' : 'Show guide'}
+          </button>
+        </div>
+
+        <GuideVisibilityMask
+          hidden={!showGuide}
+          className="mt-4"
+          description={`Reveal the guide whenever you want the reference motion for ${WORD_GUIDES[target].label}.`}
+        >
+          <div className="space-y-4">
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
               <div className="aspect-video flex items-center justify-center">
                 <img
                   src={wordGifSrc(target)}
@@ -813,31 +792,31 @@ function MixedPracticeContent({
                 />
               </div>
             </div>
-          </div>
 
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-              Requirements
-            </p>
-            <p className="mt-1 text-sm text-slate-600">
-              Get each word correct {REQUIRED_PER_WORD} times. The target changes so you
-              can’t “camp” one motion.
-            </p>
-            <div className="mt-2 space-y-2">
-              {MODULE_THREE_WORDS.map((w) => (
-                <div key={w} className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-900">
-                    {WORD_GUIDES[w].label}
-                  </span>
-                  <span className="text-[11px] font-semibold text-slate-600">
-                    {Math.min(counts[w], REQUIRED_PER_WORD)}/{REQUIRED_PER_WORD}
-                  </span>
-                </div>
-              ))}
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                Requirements
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Get each word correct {REQUIRED_PER_WORD} times. The target changes so you
+                can’t “camp” one motion.
+              </p>
+              <div className="mt-2 space-y-2">
+                {MODULE_THREE_WORDS.map((w) => (
+                  <div key={w} className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-900">
+                      {WORD_GUIDES[w].label}
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-600">
+                      {Math.min(counts[w], REQUIRED_PER_WORD)}/{REQUIRED_PER_WORD}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        </GuideVisibilityMask>
+      </div>
     </div>
   );
 }
