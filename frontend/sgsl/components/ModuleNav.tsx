@@ -1,16 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useUserProgress } from '@/hooks/useUserProgress';
 
 export default function ModuleNav({
   currentModule,
 }: {
   currentModule: 1 | 2 | 3;
 }) {
-  const { profile } = useUserProgress();
-  const unlocked = new Set(profile?.unlockedModules ?? [1]);
-
   return (
     <div className="w-full border-b border-slate-200 bg-white/80 backdrop-blur">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3">
@@ -23,25 +19,14 @@ export default function ModuleNav({
             Modules
           </span>
           <div className="flex items-center gap-2">
-            {[1, 2].map((id) => {
-              const isUnlocked = unlocked.has(id);
+            {[1, 2, 3].map((id) => {
               const isActive = currentModule === id;
 
               const classes = `rounded-full border px-3 py-1 text-[11px] transition ${
                 isActive
                   ? 'border-blue-200 bg-blue-50 text-blue-700'
-                  : isUnlocked
-                  ? 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
-                  : 'border-slate-200 bg-slate-100 text-slate-300 cursor-not-allowed'
+                  : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
               }`;
-
-              if (!isUnlocked) {
-                return (
-                  <span key={id} className={classes}>
-                    Module {id} 🔒
-                  </span>
-                );
-              }
 
               return (
                 <Link key={id} href={`/module-${id}`} className={classes}>

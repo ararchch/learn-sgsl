@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import Script from 'next/script';
+import MediaPipeScripts from '@/components/MediaPipeScripts';
 import { useRouter, useSearchParams } from 'next/navigation';
 import FingerspellingPractice from '@/components/FingerSpellingPractice';
 import StaticLetterPractice from '@/components/StaticLetterPractice';
@@ -111,8 +111,6 @@ function OnboardingPageContent() {
   const {
     profile,
     loading,
-    startOnboarding,
-    completeOnboardingStep,
     completeOnboarding,
   } = useUserProgress();
 
@@ -121,9 +119,10 @@ function OnboardingPageContent() {
     [searchParams],
   );
 
+  const [completedStepIds, setCompletedStepIds] = useState<OnboardingStepId[]>([]);
   const completedSteps = useMemo(
-    () => new Set<OnboardingStepId>(profile?.onboardingStepsCompleted ?? []),
-    [profile?.onboardingStepsCompleted],
+    () => new Set<OnboardingStepId>(completedStepIds),
+    [completedStepIds],
   );
   const firstIncompleteStep = useMemo(
     () => STEP_META.find((step) => !completedSteps.has(step.id))?.id ?? null,
@@ -159,10 +158,7 @@ function OnboardingPageContent() {
 
   useEffect(() => {
     if (loading) return;
-    if (!profile) {
-      router.replace('/login');
-      return;
-    }
+    if (!profile) return;
     if (hasCompletedOnboarding(profile, ONBOARDING_VERSION)) {
       router.replace(nextPath);
       return;
@@ -182,54 +178,36 @@ function OnboardingPageContent() {
         return;
       }
       setSavingStep(stepId);
-      await completeOnboardingStep(stepId);
+      setCompletedStepIds((current) =>
+        current.includes(stepId) ? current : [...current, stepId],
+      );
       setSavingStep(null);
       setRequestedStep(nextStep);
     },
-    [savingStep, completedSteps, completeOnboardingStep],
+    [savingStep, completedSteps],
   );
 
   const handleStartSetup = useCallback(async () => {
     if (!profile || savingStep) return;
     setSavingStep('welcome');
-    if (!profile.onboardingStartedAt) {
-      await startOnboarding();
-    }
-    if (!completedSteps.has('welcome')) {
-      await completeOnboardingStep('welcome');
-    }
+    setCompletedStepIds((current) =>
+      current.includes('welcome') ? current : [...current, 'welcome'],
+    );
     setSavingStep(null);
     setRequestedStep('camera-check');
-  }, [
-    profile,
-    savingStep,
-    startOnboarding,
-    completedSteps,
-    completeOnboardingStep,
-  ]);
+  }, [profile, savingStep]);
 
   const handleFinish = useCallback(async () => {
     if (!profile || finishing) return;
     setFinishing(true);
-    if (!completedSteps.has('module-previews')) {
-      await completeOnboardingStep('module-previews');
-    }
-    const startedAtMs = profile.onboardingStartedAt
-      ? Date.parse(profile.onboardingStartedAt)
-      : NaN;
-    const baseline = Number.isFinite(startedAtMs) ? startedAtMs : Date.now();
-    const durationMs = Math.max(0, Date.now() - baseline);
-    await completeOnboarding(durationMs);
+    setCompletedStepIds((current) =>
+      current.includes('module-previews')
+        ? current
+        : [...current, 'module-previews'],
+    );
+    await completeOnboarding();
     router.replace(nextPath);
-  }, [
-    profile,
-    finishing,
-    completedSteps,
-    completeOnboardingStep,
-    completeOnboarding,
-    router,
-    nextPath,
-  ]);
+  }, [profile, finishing, completeOnboarding, router, nextPath]);
 
   if (loading || !profile) {
     return (
@@ -243,14 +221,7 @@ function OnboardingPageContent() {
 
   return (
     <>
-      <Script
-        src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
-        strategy="afterInteractive"
-      />
-      <Script
-        src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
-        strategy="afterInteractive"
-      />
+      <MediaPipeScripts />
 
       <div className="min-h-screen bg-slate-50 text-slate-900">
         <header className="border-b border-slate-200 bg-white">
@@ -330,7 +301,7 @@ function OnboardingPageContent() {
                   Welcome to SgSL Learn
                 </h2>
                 <div className="space-y-2 rounded-2xl text-sm text-slate-600">
-                  <p>This platform relies on input from your webcam, and consequently benefits from good positioning of your hands to improve the computer's recognition. </p>
+                  <p>This platform relies on input from your webcam, and consequently benefits from good positioning of your hands to improve the computer&apos;s recognition. </p>
                   <p>This quick setup guide will help you get familar with how to use the platform successfully.</p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
@@ -376,7 +347,6 @@ function OnboardingPageContent() {
                 onPassed={() => {
                   void markStepAndMove('fingerspelling-check', 'module-previews');
                 }}
-                pending={savingStep === 'fingerspelling-check'}
               />
             )}
 
@@ -662,7 +632,7 @@ function HoldMechanicCheck({
         In module 1 of this platform, you will learn to sign individual letters of the alphabet. This involves forming and maintaing a specific shape with your right hand.
       </p>
       <p className="text-sm text-slate-600">
-        To pass this check, we will learn to sign the letter 'L'. Copy the guide for letter L (with your right hand), then hold it steady in the frame for a second.
+        To pass this check, we will learn to sign the letter L. Copy the guide for letter L (with your right hand), then hold it steady in the frame for a second.
       </p>
 
       <div className="grid items-stretch gap-4 lg:grid-cols-2">
@@ -716,10 +686,8 @@ function HoldMechanicCheck({
 
 function LFingerspellingCheck({
   onPassed,
-  pending,
 }: {
   onPassed: () => void;
-  pending: boolean;
 }) {
   const completedRef = useRef(false);
   const [attemptKey, setAttemptKey] = useState(0);
@@ -736,7 +704,7 @@ function LFingerspellingCheck({
         In module 2, you will learn to finger spell words using handshapes (i.e. alphabets) that you learned in module 1. This involves gesturing and releasing between letters.
       </p>
       <p className="text-sm text-slate-600">
-        To pass this step, gesture and release the letter 'L' 4 times to simulate fingerspelling a word.
+        To pass this step, gesture and release the letter L 4 times to simulate fingerspelling a word.
       </p>
 
 

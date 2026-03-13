@@ -1,14 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import Script from 'next/script';
-import { useRouter } from 'next/navigation';
+import MediaPipeScripts from '@/components/MediaPipeScripts';
 import ModuleNav from '@/components/ModuleNav';
 import Module2IntroLessonView from '@/components/Module2IntroLessonView';
 import FingerspellingPractice from '@/components/FingerSpellingPractice';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import { MODULE2_PRACTICE_TOUR_VERSION } from '@/lib/module1Tour';
-import { hasCompletedOnboarding } from '@/lib/onboarding';
 
 type LessonType = 'intro' | 'practice' | 'testing';
 
@@ -102,13 +100,11 @@ const spellingWords = [
 ];
 
 export default function ModuleTwoPage() {
-  const router = useRouter();
   const [currentLessonId, setCurrentLessonId] = useState<string>(lessons[0].id);
   const {
     profile,
     loading,
     completeLesson,
-    unlockModule,
     completeModule2PracticeTour,
   } = useUserProgress();
   const completedLessons = profile?.completedLessons ?? [];
@@ -122,7 +118,6 @@ export default function ModuleTwoPage() {
   const moduleProgress = Math.round((completedCount / lessons.length) * 100);
 
   const isCompleted = completedLessons.includes(`module2-${currentLesson.id}`);
-  const moduleTwoComplete = completedCount === lessons.length;
 
   const nextLessonId = useMemo(() => {
     const index = lessons.findIndex((lesson) => lesson.id === currentLesson.id);
@@ -133,29 +128,9 @@ export default function ModuleTwoPage() {
     completeLesson(`module2-${currentLesson.id}`, 50);
   }
 
-  useEffect(() => {
-    if (loading) return;
-    if (!profile) return;
-    if (hasCompletedOnboarding(profile)) return;
-    router.replace(`/onboarding?next=${encodeURIComponent('/module-2')}`);
-  }, [loading, profile, router]);
-
-  useEffect(() => {
-    if (moduleTwoComplete) {
-      unlockModule(3);
-    }
-  }, [moduleTwoComplete, unlockModule]);
-
   return (
     <>
-      <Script
-        src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
-        strategy="afterInteractive"
-      />
-      <Script
-        src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
-        strategy="afterInteractive"
-      />
+      <MediaPipeScripts />
 
       <ModuleNav currentModule={2} />
       <div className="min-h-screen bg-slate-50 text-slate-900 flex">
@@ -278,7 +253,7 @@ export default function ModuleTwoPage() {
                 practiceTourVersionCompleted={
                   loading || !profile
                     ? null
-                    : profile.module2PracticeTourVersionCompleted
+                    : profile.module2practice
                 }
                 onCompletePracticeTour={completeModule2PracticeTour}
               />
@@ -293,7 +268,7 @@ export default function ModuleTwoPage() {
                 practiceTourVersionCompleted={
                   loading || !profile
                     ? null
-                    : profile.module2PracticeTourVersionCompleted
+                    : profile.module2practice
                 }
                 onCompletePracticeTour={completeModule2PracticeTour}
               />
@@ -548,7 +523,7 @@ function PracticeLessonContent({
     <div className="grid gap-6">
       <div
         ref={practiceMainCardRef}
-        className={`relative rounded-2xl border border-slate-200 bg-white p-4 md:p-5 ${
+        className={`relative mx-auto w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-4 md:p-5 ${
           isWorkspaceTourStep ? module2PracticeTourCardHighlightClass : ''
         }`}
       >

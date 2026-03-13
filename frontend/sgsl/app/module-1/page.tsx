@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import Script from 'next/script';
+import MediaPipeScripts from '@/components/MediaPipeScripts';
 import { useRouter } from 'next/navigation';
 import StaticLetterPractice from '@/components/StaticLetterPractice';
 import ModuleNav from '@/components/ModuleNav';
@@ -11,7 +11,6 @@ import {
   MODULE1_LESSON_TOUR_VERSION,
   MODULE1_PRACTICE_TOUR_VERSION,
 } from '@/lib/module1Tour';
-import { hasCompletedOnboarding } from '@/lib/onboarding';
 import {
   MODULE_ONE_LESSONS,
   LessonConfig,
@@ -61,14 +60,12 @@ export default function ModuleOnePage() {
 }
 
 function Module1Container() {
-  const router = useRouter();
   const lessons = MODULE_ONE_LESSONS;
   const [currentLessonId, setCurrentLessonId] = useState<string>(lessons[0].id);
   const {
     profile,
     loading,
     completeLesson,
-    unlockModule,
     completeModule1LessonTour,
     completeModule1PracticeTour,
   } = useUserProgress();
@@ -81,7 +78,6 @@ function Module1Container() {
     completedLessons.includes(`module1-${lesson.id}`),
   ).length;
   const moduleProgress = Math.round((completedCount / lessons.length) * 100);
-  const moduleOneComplete = completedCount === lessons.length;
 
   const isCompleted = completedLessons.includes(`module1-${currentLesson.id}`);
 
@@ -94,29 +90,9 @@ function Module1Container() {
     completeLesson(`module1-${currentLesson.id}`, 50);
   }
 
-  useEffect(() => {
-    if (loading) return;
-    if (!profile) return;
-    if (hasCompletedOnboarding(profile)) return;
-    router.replace(`/onboarding?next=${encodeURIComponent('/module-1')}`);
-  }, [loading, profile, router]);
-
-  useEffect(() => {
-    if (moduleOneComplete) {
-      unlockModule(2);
-    }
-  }, [moduleOneComplete, unlockModule]);
-
   return (
     <>
-      <Script
-        src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
-        strategy="afterInteractive"
-      />
-      <Script
-        src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
-        strategy="afterInteractive"
-      />
+      <MediaPipeScripts />
 
       <div className="min-h-screen bg-slate-50 text-slate-900 flex">
         <aside className="hidden md:flex w-72 flex-col border-r border-slate-200 bg-white">
@@ -242,7 +218,7 @@ function Module1Container() {
                   tourVersionCompleted={
                     loading || !profile
                       ? null
-                      : profile.module1LessonTourVersionCompleted
+                      : profile.module1lessontour
                   }
                   onCompleteLessonTour={completeModule1LessonTour}
                 />
@@ -264,7 +240,7 @@ function Module1Container() {
                   practiceTourVersionCompleted={
                     loading || !profile
                       ? null
-                      : profile.module1PracticeTourVersionCompleted
+                      : profile.module1practice
                   }
                   onCompletePracticeTour={completeModule1PracticeTour}
                 />
@@ -276,7 +252,6 @@ function Module1Container() {
                   letters={currentLesson.letters}
                   isCompleted={isCompleted}
                   onComplete={markLessonComplete}
-                  onUnlockModule={unlockModule}
                 />
               )}
             </div>
@@ -1429,12 +1404,10 @@ function FinalTestView({
   letters,
   isCompleted,
   onComplete,
-  onUnlockModule,
 }: {
   letters: string[];
   isCompleted: boolean;
   onComplete: () => void;
-  onUnlockModule: (moduleId: number) => void;
 }) {
   type Result = { letter: string; status: 'pass' | 'fail' };
   const [targetIndex, setTargetIndex] = useState(0);
@@ -1515,17 +1488,9 @@ function FinalTestView({
     if (testState !== 'finished' || finalScore == null) return;
     if (!isCompleted && finalScore / letters.length >= 0.9) {
       onComplete();
-      onUnlockModule(2);
       setShowModuleTwoPrompt(true);
     }
-  }, [
-    testState,
-    finalScore,
-    isCompleted,
-    letters.length,
-    onComplete,
-    onUnlockModule,
-  ]);
+  }, [testState, finalScore, isCompleted, letters.length, onComplete]);
 
   function handlePrediction(letter: string) {
     if (testState !== 'running' || status === 'success' || letter !== targetLetter)

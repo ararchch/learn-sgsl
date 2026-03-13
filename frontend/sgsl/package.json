@@ -6,12 +6,17 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "postinstall": "prisma generate && node scripts/sync-mediapipe-assets.mjs",
+    "mediapipe:sync": "node scripts/sync-mediapipe-assets.mjs",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push"
   },
   "dependencies": {
     "@mediapipe/camera_utils": "^0.3.1675466862",
     "@mediapipe/drawing_utils": "^0.3.1675466124",
     "@mediapipe/hands": "^0.4.1675469240",
+    "@prisma/client": "6.19.0",
     "framer-motion": "^12.29.2",
     "next": "^16.1.6",
     "react": "^19.2.4",
@@ -24,6 +29,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.3",
+    "prisma": "6.19.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

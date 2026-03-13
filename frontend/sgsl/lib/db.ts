@@ -1,92 +1,49 @@
-import { promises as fs } from 'fs';
-import path from 'path';
-import {
-  DEFAULT_ONBOARDING_FIELDS,
-  mergeOnboardingSteps,
-  normalizeOnboardingSteps,
-  type OnboardingProfileFields,
-  type OnboardingStepId,
-} from './onboarding';
+import { Prisma } from '@prisma/client';
+import { prisma } from './prisma';
 
-type UserProfile = {
+export type UserProfile = {
   username: string;
   xp: number;
   streak: number;
   lastLogin: string;
   completedLessons: string[];
-  unlockedModules: number[];
-  module1LessonTourVersionCompleted: number;
-  module1PracticeTourVersionCompleted: number;
-  module2PracticeTourVersionCompleted: number;
-  playgroundTourVersionCompleted: number;
-} & OnboardingProfileFields;
-
-type UserUpdate = Partial<Omit<UserProfile, 'username'>> & {
-  completedLessons?: string[];
-  unlockedModules?: number[];
-  onboardingStepsCompleted?: OnboardingStepId[];
+  module1lessontour: number;
+  module1practice: number;
+  module2practice: number;
+  playground: number;
+  onboardingVersionCompleted: number;
 };
 
-type OnboardingUpdate = Partial<OnboardingProfileFields>;
+export type UserUpdate = Partial<Omit<UserProfile, 'username'>>;
 
-function resolveDataPath(): string {
-  const configuredPath = process.env.USERS_DATA_PATH?.trim();
-  if (configuredPath) {
-    return path.isAbsolute(configuredPath)
-      ? configuredPath
-      : path.join(process.cwd(), configuredPath);
-  }
+type PrismaUserRecord = Awaited<ReturnType<typeof prisma.user.findUnique>>;
 
-  if (process.env.VERCEL) {
-    // Vercel serverless functions can only write to /tmp.
-    return path.join('/tmp', 'sgsl', 'users.json');
-  }
-
-  return path.join(process.cwd(), 'data', 'users.json');
+function buildCreatePayload(username: string, now: Date) {
+  return {
+    username,
+    xp: 0,
+    streak: 0,
+    lastLogin: now,
+    completedLessons: [],
+    module1lessontour: 0,
+    module1practice: 0,
+    module2practice: 0,
+    playground: 0,
+    onboardingVersionCompleted: 0,
+  };
 }
 
-const DATA_PATH = resolveDataPath();
-
-async function ensureDataFile() {
-  await fs.mkdir(path.dirname(DATA_PATH), { recursive: true });
-  try {
-    await fs.access(DATA_PATH);
-  } catch {
-    await fs.writeFile(DATA_PATH, JSON.stringify([], null, 2), 'utf8');
-  }
+function isUniqueConstraintError(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
+  );
 }
 
-function parseUsersArray(raw: string): { parsed: unknown[]; recovered: boolean } {
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return { parsed, recovered: false };
-    }
-  } catch {
-  }
-
-  const firstArrayStart = raw.indexOf('[');
-  if (firstArrayStart < 0) {
-    throw new Error('Users data file is not a JSON array.');
-  }
-
-  for (
-    let end = raw.lastIndexOf(']');
-    end >= firstArrayStart;
-    end = raw.lastIndexOf(']', end - 1)
-  ) {
-    const candidate = raw.slice(firstArrayStart, end + 1).trim();
-    if (!candidate) continue;
-    try {
-      const parsed = JSON.parse(candidate);
-      if (Array.isArray(parsed)) {
-        return { parsed, recovered: true };
-      }
-    } catch {
-    }
-  }
-
-  throw new Error('Unable to parse users data file.');
+function toNonNegativeInt(value: unknown, fallback: number = 0): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.round(parsed));
 }
 
 function normalizeStringArray(value: unknown): string[] {
@@ -101,227 +58,167 @@ function normalizeStringArray(value: unknown): string[] {
   );
 }
 
-function normalizeNumberArray(value: unknown): number[] {
-  if (!Array.isArray(value)) return [];
-  return Array.from(
-    new Set(
-      value
-        .map((item) => Number(item))
-        .filter((item) => Number.isFinite(item) && item > 0)
-        .map((item) => Math.floor(item)),
-    ),
-  );
-}
-
-function normalizeNullableIsoString(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
-function normalizeNullableMs(value: unknown): number | null {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) return null;
-  return Math.round(parsed);
-}
-
-function normalizeUser(raw: unknown): UserProfile | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const user = raw as Record<string, unknown>;
-  const username =
-    typeof user.username === 'string' ? user.username.trim() : '';
-  if (!username) return null;
-
-  const xp = Number.isFinite(Number(user.xp)) ? Number(user.xp) : 0;
-  const streak = Number.isFinite(Number(user.streak)) ? Number(user.streak) : 0;
-  const lastLogin =
-    typeof user.lastLogin === 'string' && user.lastLogin.trim()
-      ? user.lastLogin
-      : new Date().toISOString();
-  const completedLessons = normalizeStringArray(user.completedLessons);
-  const unlockedModules = normalizeNumberArray(user.unlockedModules);
-  const onboardingVersionCompleted = Number.isFinite(
-    Number(user.onboardingVersionCompleted),
-  )
-    ? Math.max(0, Math.floor(Number(user.onboardingVersionCompleted)))
-    : DEFAULT_ONBOARDING_FIELDS.onboardingVersionCompleted;
-  const onboardingStartedAt = normalizeNullableIsoString(
-    user.onboardingStartedAt,
-  );
-  const onboardingCompletedAt = normalizeNullableIsoString(
-    user.onboardingCompletedAt,
-  );
-  const onboardingDurationMs = normalizeNullableMs(user.onboardingDurationMs);
-  const onboardingStepsCompleted = normalizeOnboardingSteps(
-    user.onboardingStepsCompleted,
-  );
-  const module1LessonTourVersionCompleted = Number.isFinite(
-    Number(user.module1LessonTourVersionCompleted),
-  )
-    ? Math.max(0, Math.floor(Number(user.module1LessonTourVersionCompleted)))
-    : 0;
-  const module1PracticeTourVersionCompleted = Number.isFinite(
-    Number(user.module1PracticeTourVersionCompleted),
-  )
-    ? Math.max(0, Math.floor(Number(user.module1PracticeTourVersionCompleted)))
-    : 0;
-  const module2PracticeTourVersionCompleted = Number.isFinite(
-    Number(user.module2PracticeTourVersionCompleted),
-  )
-    ? Math.max(0, Math.floor(Number(user.module2PracticeTourVersionCompleted)))
-    : 0;
-  const playgroundTourVersionCompleted = Number.isFinite(
-    Number(user.playgroundTourVersionCompleted),
-  )
-    ? Math.max(0, Math.floor(Number(user.playgroundTourVersionCompleted)))
-    : 0;
-
+function serializeUser(user: PrismaUserRecord): UserProfile | null {
+  if (!user) return null;
   return {
-    username,
-    xp: Math.max(0, Math.round(xp)),
-    streak: Math.max(0, Math.round(streak)),
-    lastLogin,
-    completedLessons,
-    unlockedModules: unlockedModules.length > 0 ? unlockedModules : [1],
-    onboardingVersionCompleted,
-    onboardingStartedAt,
-    onboardingCompletedAt,
-    onboardingDurationMs,
-    onboardingStepsCompleted,
-    module1LessonTourVersionCompleted,
-    module1PracticeTourVersionCompleted,
-    module2PracticeTourVersionCompleted,
-    playgroundTourVersionCompleted,
+    username: user.username,
+    xp: toNonNegativeInt(user.xp),
+    streak: toNonNegativeInt(user.streak),
+    lastLogin: user.lastLogin.toISOString(),
+    completedLessons: normalizeStringArray(user.completedLessons),
+    module1lessontour: toNonNegativeInt(user.module1lessontour),
+    module1practice: toNonNegativeInt(user.module1practice),
+    module2practice: toNonNegativeInt(user.module2practice),
+    playground: toNonNegativeInt(user.playground),
+    onboardingVersionCompleted: toNonNegativeInt(user.onboardingVersionCompleted),
   };
 }
 
-async function readUsers(): Promise<UserProfile[]> {
-  await ensureDataFile();
-  const raw = await fs.readFile(DATA_PATH, 'utf8');
-  const { parsed, recovered } = parseUsersArray(raw);
-  const users = parsed
-    .map((entry) => normalizeUser(entry))
-    .filter((entry): entry is UserProfile => entry !== null);
+function buildUpdatePayload(data: UserUpdate) {
+  const payload: {
+    xp?: number;
+    streak?: number;
+    lastLogin?: Date;
+    completedLessons?: string[];
+    module1lessontour?: number;
+    module1practice?: number;
+    module2practice?: number;
+    playground?: number;
+    onboardingVersionCompleted?: number;
+  } = {};
 
-  if (recovered) {
-    console.warn('Recovered malformed users data file and rewrote normalized JSON.');
-    await writeUsers(users);
+  if (data.xp !== undefined) {
+    payload.xp = toNonNegativeInt(data.xp);
+  }
+  if (data.streak !== undefined) {
+    payload.streak = toNonNegativeInt(data.streak);
+  }
+  if (data.lastLogin !== undefined) {
+    const parsed = new Date(data.lastLogin);
+    payload.lastLogin = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  }
+  if (data.completedLessons !== undefined) {
+    payload.completedLessons = normalizeStringArray(data.completedLessons);
+  }
+  if (data.module1lessontour !== undefined) {
+    payload.module1lessontour = toNonNegativeInt(data.module1lessontour);
+  }
+  if (data.module1practice !== undefined) {
+    payload.module1practice = toNonNegativeInt(data.module1practice);
+  }
+  if (data.module2practice !== undefined) {
+    payload.module2practice = toNonNegativeInt(data.module2practice);
+  }
+  if (data.playground !== undefined) {
+    payload.playground = toNonNegativeInt(data.playground);
+  }
+  if (data.onboardingVersionCompleted !== undefined) {
+    payload.onboardingVersionCompleted = toNonNegativeInt(
+      data.onboardingVersionCompleted,
+    );
   }
 
-  return users;
-}
-
-async function writeUsers(users: UserProfile[]) {
-  await ensureDataFile();
-  await fs.writeFile(DATA_PATH, JSON.stringify(users, null, 2), 'utf8');
+  return payload;
 }
 
 export async function getUser(username: string): Promise<UserProfile | null> {
-  const users = await readUsers();
-  return users.find((user) => user.username === username) ?? null;
+  const normalizedUsername = username.trim();
+  if (!normalizedUsername) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { username: normalizedUsername },
+  });
+
+  return serializeUser(user);
 }
 
 export async function createUser(username: string): Promise<UserProfile> {
-  const users = await readUsers();
-  const existing = users.find((user) => user.username === username);
-  if (existing) return existing;
-  const now = new Date().toISOString();
-  const profile: UserProfile = {
-    username,
-    xp: 0,
-    streak: 0,
-    lastLogin: now,
-    completedLessons: [],
-    unlockedModules: [1],
-    module1LessonTourVersionCompleted: 0,
-    module1PracticeTourVersionCompleted: 0,
-    module2PracticeTourVersionCompleted: 0,
-    playgroundTourVersionCompleted: 0,
-    ...DEFAULT_ONBOARDING_FIELDS,
-  };
-  users.push(profile);
-  await writeUsers(users);
-  return profile;
+  const normalizedUsername = username.trim();
+  const now = new Date();
+  const existing = await prisma.user.findUnique({
+    where: { username: normalizedUsername },
+  });
+  if (existing) {
+    return serializeUser(existing)!;
+  }
+
+  try {
+    const user = await prisma.user.create({
+      data: buildCreatePayload(normalizedUsername, now),
+    });
+
+    return serializeUser(user)!;
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) {
+      throw error;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { username: normalizedUsername },
+    });
+    if (!user) {
+      throw error;
+    }
+    return serializeUser(user)!;
+  }
 }
 
-export async function updateProgress(
+export async function updateUser(
   username: string,
   data: UserUpdate,
 ): Promise<UserProfile | null> {
-  const users = await readUsers();
-  const index = users.findIndex((user) => user.username === username);
-  if (index === -1) return null;
+  const normalizedUsername = username.trim();
+  if (!normalizedUsername) return null;
 
-  const current = users[index];
-  const mergedLessons = data.completedLessons
-    ? Array.from(new Set([...current.completedLessons, ...data.completedLessons]))
-    : current.completedLessons;
-  const mergedModules = data.unlockedModules
-    ? Array.from(new Set([...current.unlockedModules, ...data.unlockedModules]))
-    : current.unlockedModules;
-  const mergedOnboardingSteps = data.onboardingStepsCompleted
-    ? mergeOnboardingSteps(
-        current.onboardingStepsCompleted,
-        normalizeOnboardingSteps(data.onboardingStepsCompleted),
-      )
-    : current.onboardingStepsCompleted;
+  const existing = await prisma.user.findUnique({
+    where: { username: normalizedUsername },
+  });
+  if (!existing) return null;
 
-  const next: UserProfile = {
-    ...current,
-    ...data,
-    completedLessons: mergedLessons,
-    unlockedModules: mergedModules,
-    onboardingStepsCompleted: mergedOnboardingSteps,
-  };
+  const user = await prisma.user.update({
+    where: { username: normalizedUsername },
+    data: buildUpdatePayload(data),
+  });
 
-  users[index] = normalizeUser(next) ?? current;
-  await writeUsers(users);
-  return users[index];
-}
-
-export async function updateOnboarding(
-  username: string,
-  data: OnboardingUpdate,
-  options: { mergeSteps?: boolean } = {},
-): Promise<UserProfile | null> {
-  const users = await readUsers();
-  const index = users.findIndex((user) => user.username === username);
-  if (index === -1) return null;
-
-  const current = users[index];
-  const mergeSteps = options.mergeSteps ?? true;
-  const nextSteps = Array.isArray(data.onboardingStepsCompleted)
-    ? normalizeOnboardingSteps(data.onboardingStepsCompleted)
-    : undefined;
-
-  const onboardingStepsCompleted =
-    nextSteps === undefined
-      ? current.onboardingStepsCompleted
-      : mergeSteps
-        ? mergeOnboardingSteps(current.onboardingStepsCompleted, nextSteps)
-        : nextSteps;
-
-  const next: UserProfile = normalizeUser({
-    ...current,
-    ...data,
-    onboardingStepsCompleted,
-  }) ?? current;
-
-  users[index] = next;
-  await writeUsers(users);
-  return users[index];
+  return serializeUser(user);
 }
 
 export async function touchLogin(username: string): Promise<UserProfile> {
-  const users = await readUsers();
-  const index = users.findIndex((user) => user.username === username);
-  if (index === -1) {
-    return createUser(username);
-  }
-  const now = new Date().toISOString();
-  users[index] = { ...users[index], lastLogin: now };
-  await writeUsers(users);
-  return users[index];
-}
+  const normalizedUsername = username.trim();
+  const now = new Date();
+  const existing = await prisma.user.findUnique({
+    where: { username: normalizedUsername },
+  });
 
-export type { UserProfile };
+  if (existing) {
+    const user = await prisma.user.update({
+      where: { username: normalizedUsername },
+      data: {
+        lastLogin: now,
+      },
+    });
+
+    return serializeUser(user)!;
+  }
+
+  try {
+    const user = await prisma.user.create({
+      data: buildCreatePayload(normalizedUsername, now),
+    });
+
+    return serializeUser(user)!;
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) {
+      throw error;
+    }
+
+    const user = await prisma.user.update({
+      where: { username: normalizedUsername },
+      data: {
+        lastLogin: now,
+      },
+    });
+
+    return serializeUser(user)!;
+  }
+}

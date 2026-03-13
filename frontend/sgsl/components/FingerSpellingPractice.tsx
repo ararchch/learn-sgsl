@@ -275,7 +275,7 @@ export default function FingerspellingPractice({
   }, [landmarkPoints, videoRef]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">

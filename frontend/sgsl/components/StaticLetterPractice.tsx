@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { getMediaPipeHandsAssetUrl } from '@/lib/mediapipe';
+import { isExpectedPlayInterruption } from '@/lib/mediaPlayback';
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
-const R_MINI_FEEDBACK_WINDOW = 60;
+const R_MINI_FEEDBACK_WINDOW = 10;
 
 const R_MINI_PALM_LANDMARKS = [0, 5, 9, 13, 17] as const;
 const R_MINI_CHECK_CONFIGS = [
@@ -89,6 +91,7 @@ type MediaPipeWindow = Window & {
 };
 
 type RMiniCheckId = (typeof R_MINI_CHECK_CONFIGS)[number]['id'];
+type RMiniMarginByCheck = Partial<Record<RMiniCheckId, number>>;
 
 type BrowserLinearSVCModel = {
   format: 'linear_svc_binary_v1';
@@ -154,6 +157,7 @@ interface Props {
   enableRMiniChecks?: boolean;
   disableStaticModel?: boolean;
   rMiniMargin?: number;
+  rMiniMarginByCheck?: RMiniMarginByCheck;
   rMiniModelBaseUrl?: string;
 }
 
@@ -179,6 +183,21 @@ function hasUsableVideoFrame(video: HTMLVideoElement): boolean {
     video.videoWidth > 0 &&
     video.videoHeight > 0
   );
+}
+
+async function waitForHandsConstructor(
+  timeoutMs = 6000,
+  pollIntervalMs = 100,
+): Promise<HandsConstructor | null> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const ctor = (window as MediaPipeWindow).Hands;
+    if (ctor) return ctor;
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, pollIntervalMs);
+    });
+  }
+  return null;
 }
 
 function sigmoid(x: number): number {
@@ -233,10 +252,22 @@ function buildSubsetConnections(
 function extractSubsetFeature(
   handLandmarks: HandLandmark[],
   subsetIndices: number[],
-): number[] {
+): number[] | null {
+  if (!Array.isArray(handLandmarks) || handLandmarks.length < 21) {
+    return null;
+  }
+
   const pts = new Array<[number, number, number]>(21);
   for (let i = 0; i < 21; i++) {
     const p = handLandmarks[i];
+    if (!p) return null;
+    if (
+      !Number.isFinite(p.x) ||
+      !Number.isFinite(p.y) ||
+      (p.z != null && !Number.isFinite(p.z))
+    ) {
+      return null;
+    }
     pts[i] = [p.x, p.y, p.z ?? 0.0];
   }
 
@@ -277,6 +308,9 @@ function extractSubsetFeature(
 
   const out: number[] = [];
   for (const idx of subsetIndices) {
+    if (!Number.isInteger(idx) || idx < 0 || idx >= 21) {
+      return null;
+    }
     out.push(pts[idx][0] / palmWidth);
     out.push(pts[idx][1] / palmWidth);
     out.push(pts[idx][2] / palmWidth);
@@ -346,6 +380,7 @@ export default function StaticLetterPractice({
   enableRMiniChecks = false,
   disableStaticModel = false,
   rMiniMargin = 0.2,
+  rMiniMarginByCheck = {},
   rMiniModelBaseUrl = '/models',
 }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -378,6 +413,7 @@ export default function StaticLetterPractice({
   const enableRMiniChecksRef = useRef<boolean>(enableRMiniChecks);
   const disableStaticModelRef = useRef<boolean>(disableStaticModel);
   const rMiniMarginRef = useRef<number>(rMiniMargin);
+  const rMiniMarginByCheckRef = useRef<RMiniMarginByCheck>(rMiniMarginByCheck);
   const rMiniModelBaseUrlRef = useRef<string>(rMiniModelBaseUrl);
 
   const rMiniChecksRef = useRef<LoadedRMiniCheck[]>([]);
@@ -432,6 +468,10 @@ export default function StaticLetterPractice({
   useEffect(() => {
     rMiniMarginRef.current = rMiniMargin;
   }, [rMiniMargin]);
+
+  useEffect(() => {
+    rMiniMarginByCheckRef.current = rMiniMarginByCheck;
+  }, [rMiniMarginByCheck]);
 
   useEffect(() => {
     rMiniModelBaseUrlRef.current = rMiniModelBaseUrl;
@@ -573,8 +613,21 @@ export default function StaticLetterPractice({
 
     for (const check of loadedChecks) {
       const feats = extractSubsetFeature(mirroredHand, check.landmarks);
+      if (!feats) {
+        return {
+          status: 'loading',
+          marginThreshold,
+          loadedChecks: loadedCount,
+          totalChecks,
+          missingChecks,
+          checks: [],
+        };
+      }
       const out = predictRMiniCheck(check.model, feats);
-      const passed = out.predLabel === 'present' && out.margin >= marginThreshold;
+      const checkMarginThreshold =
+        rMiniMarginByCheckRef.current[check.id] ?? marginThreshold;
+      const passed =
+        out.predLabel === 'present' && out.margin >= checkMarginThreshold;
 
       checkResults.push({
         id: check.id,
@@ -921,7 +974,7 @@ export default function StaticLetterPractice({
       return;
     }
 
-    const HandsCtor = (window as MediaPipeWindow).Hands;
+    const HandsCtor = await waitForHandsConstructor();
     if (!HandsCtor) {
       setError('Mediapipe Hands not loaded. Check hands.js script.');
       return;
@@ -947,14 +1000,16 @@ export default function StaticLetterPractice({
       video.srcObject = stream;
       await video.play();
     } catch (error: unknown) {
+      if (isExpectedPlayInterruption(error)) {
+        return;
+      }
       console.error(error);
       setError(getErrorMessage(error, 'Unable to access camera'));
       return;
     }
 
     const hands = new HandsCtor({
-      locateFile: (file: string) =>
-        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+      locateFile: getMediaPipeHandsAssetUrl,
     });
     hands.setOptions({
       maxNumHands: 1,

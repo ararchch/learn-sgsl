@@ -1,11 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import DynamicSignPractice from '@/components/DynamicSignPractice';
 import ModuleNav from '@/components/ModuleNav';
 import { useUserProgress } from '@/hooks/useUserProgress';
-import { hasCompletedOnboarding } from '@/lib/onboarding';
 
 type LessonType = 'teaching' | 'practice' | 'testing';
 
@@ -84,9 +82,8 @@ function wordGifSrc(word: ModuleThreeWord) {
 }
 
 export default function ModuleThreePage() {
-  const router = useRouter();
   const [currentLessonId, setCurrentLessonId] = useState<string>(lessons[0].id);
-  const { profile, loading, completeLesson } = useUserProgress();
+  const { profile, completeLesson } = useUserProgress();
   const completedLessons = profile?.completedLessons ?? [];
 
   const currentLesson =
@@ -107,13 +104,6 @@ export default function ModuleThreePage() {
   function markLessonComplete() {
     completeLesson(`module3-${currentLesson.id}`, 50);
   }
-
-  useEffect(() => {
-    if (loading) return;
-    if (!profile) return;
-    if (hasCompletedOnboarding(profile)) return;
-    router.replace(`/onboarding?next=${encodeURIComponent('/module-3')}`);
-  }, [loading, profile, router]);
 
   return (
     <>

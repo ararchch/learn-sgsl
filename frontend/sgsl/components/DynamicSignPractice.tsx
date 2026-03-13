@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { isExpectedPlayInterruption } from '@/lib/mediaPlayback';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
 
@@ -113,9 +114,19 @@ export default function DynamicSignPractice({ focusWords, onPrediction }: Props)
       await video.play();
       setRunning(true);
       setStatus('Camera ready.');
-    } catch (e: any) {
-      console.error(e);
-      setError(e.message || 'Unable to access camera');
+    } catch (error: unknown) {
+      if (isExpectedPlayInterruption(error)) {
+        return;
+      }
+      console.error(error);
+      const message =
+        typeof error === 'object' &&
+        error !== null &&
+        'message' in error &&
+        typeof (error as { message?: unknown }).message === 'string'
+          ? (error as { message: string }).message
+          : 'Unable to access camera';
+      setError(message);
       setStatus('Camera error.');
     }
   }
@@ -229,9 +240,16 @@ export default function DynamicSignPractice({ focusWords, onPrediction }: Props)
       setPrediction(json);
       onPrediction?.(json);
       setStatus('Prediction ready.');
-    } catch (e: any) {
-      console.error(e);
-      setError(e.message || 'Prediction error');
+    } catch (error: unknown) {
+      console.error(error);
+      const message =
+        typeof error === 'object' &&
+        error !== null &&
+        'message' in error &&
+        typeof (error as { message?: unknown }).message === 'string'
+          ? (error as { message: string }).message
+          : 'Prediction error';
+      setError(message);
       setStatus('Prediction failed.');
     } finally {
       setInferenceRunning(false);

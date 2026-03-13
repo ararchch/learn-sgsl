@@ -8,7 +8,7 @@ import { hasCompletedOnboarding } from '@/lib/onboarding';
 export default function GlobalTopBar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { profile, loading, logout } = useUserProgress();
+  const { profile, loading, logout, sessionMode } = useUserProgress();
   const showPracticeNav = profile ? hasCompletedOnboarding(profile) : false;
 
   if (pathname === '/login') {
@@ -50,7 +50,7 @@ export default function GlobalTopBar() {
             </div>
           )}
         </div>
-        {profile ? (
+        {profile && sessionMode === 'authenticated' ? (
           <div className="flex items-center gap-4 text-xs text-slate-600">
             <span>🔥 {profile.streak} streak</span>
             <span>⚡ {profile.xp} XP</span>
@@ -59,12 +59,25 @@ export default function GlobalTopBar() {
               type="button"
               onClick={() => {
                 logout();
-                router.push('/login');
+                router.push('/');
               }}
               className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-500 hover:border-slate-300 hover:text-slate-700"
             >
               Log out
             </button>
+          </div>
+        ) : profile && sessionMode === 'guest' ? (
+          <div className="flex items-center gap-3 text-xs text-slate-600">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+              Guest session
+            </span>
+            <span>⚡ {profile.xp} XP</span>
+            <Link
+              href="/login"
+              className="rounded-full bg-blue-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-blue-500"
+            >
+              Log in to save progress
+            </Link>
           </div>
         ) : loading ? (
           <span className="text-xs text-slate-500">Loading session...</span>

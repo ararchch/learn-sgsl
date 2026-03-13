@@ -6,7 +6,7 @@ import { useUserProgress } from '@/hooks/useUserProgress';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { refreshProfile } = useUserProgress();
+  const { login } = useUserProgress();
   const [username, setUsername] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,22 +21,15 @@ export default function LoginPage() {
     try {
       setIsSubmitting(true);
       setError(null);
-      const response = await fetch('/api/user/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: trimmed }),
-      });
-      if (!response.ok) {
-        throw new Error('Unable to log in.');
-      }
-      document.cookie = `sgsl_user=${encodeURIComponent(
-        trimmed,
-      )}; path=/; max-age=${60 * 60 * 24 * 30}`;
-      await refreshProfile();
+      await login(trimmed);
       router.push('/');
     } catch (err) {
       console.error(err);
-      setError('Could not start your session. Please try again.');
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not start your session. Please try again.',
+      );
     } finally {
       setIsSubmitting(false);
     }

@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import Script from 'next/script';
-import { useRouter } from 'next/navigation';
+import MediaPipeScripts from '@/components/MediaPipeScripts';
 import StaticLetterPractice, {
   type PredictResponse,
   type RMiniFeedback,
@@ -13,7 +12,6 @@ import {
   MODULE_ONE_SIGNS,
   type ModuleOneLetter,
 } from '@/lib/moduleOneSigns';
-import { hasCompletedOnboarding } from '@/lib/onboarding';
 import { PLAYGROUND_TOUR_VERSION } from '@/lib/module1Tour';
 
 const PLAYGROUND_TOUR_STEPS = [
@@ -63,7 +61,6 @@ function summarizeRMiniChecks(feedback: RMiniFeedback | null): string {
 }
 
 export default function PlaygroundPage() {
-  const router = useRouter();
   const {
     profile,
     loading,
@@ -113,7 +110,7 @@ export default function PlaygroundPage() {
     guideOrientation === 'mirrored' ? 'scaleX(-1)' : undefined;
   const isVideoUnavailable = guideView === 'video' && !hasGuideVideo;
   const tourVersionCompleted =
-    loading || !profile ? null : profile.playgroundTourVersionCompleted;
+    loading || !profile ? null : profile.playground;
   const autoOpenTour =
     tourVersionCompleted != null &&
     tourVersionCompleted < PLAYGROUND_TOUR_VERSION &&
@@ -127,16 +124,6 @@ export default function PlaygroundPage() {
     'relative z-40 ring-4 ring-amber-400 ring-offset-4 ring-offset-slate-50 border-amber-300 bg-amber-50 shadow-lg shadow-amber-300/60 animate-pulse';
   const controlHighlightClass =
     'relative z-40 ring-4 ring-amber-400 ring-offset-2 ring-offset-white border-amber-300 bg-amber-100 shadow-md shadow-amber-300/60 animate-pulse';
-
-  useEffect(() => {
-    if (loading) return;
-    if (!profile) {
-      router.replace('/login');
-      return;
-    }
-    if (hasCompletedOnboarding(profile)) return;
-    router.replace(`/onboarding?next=${encodeURIComponent('/playground')}`);
-  }, [loading, profile, router]);
 
   useEffect(() => {
     if (guideView !== 'video' || !hasGuideVideo) return;
@@ -293,7 +280,7 @@ export default function PlaygroundPage() {
       'R is detected and all JS mini checks pass at margin ≥ 0.20. Keep the handshape steady.';
   }
 
-  if (loading || !profile || !hasCompletedOnboarding(profile)) {
+  if (loading || !profile) {
     return (
       <div className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
         <div className="mx-auto max-w-6xl rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
@@ -305,14 +292,7 @@ export default function PlaygroundPage() {
 
   return (
     <>
-      <Script
-        src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
-        strategy="afterInteractive"
-      />
-      <Script
-        src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
-        strategy="afterInteractive"
-      />
+      <MediaPipeScripts />
 
       <div className="min-h-screen bg-slate-50 text-slate-900">
         <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
@@ -409,6 +389,11 @@ export default function PlaygroundPage() {
                     enableRMiniChecks={isRTarget}
                     disableStaticModel={isRTarget}
                     rMiniMargin={0.2}
+                    rMiniMarginByCheck={{
+                      cross: 0.5,
+                      thumb: 1.0,
+                      tuck: 0.14,
+                    }}
                   />
                 </div>
               </div>
