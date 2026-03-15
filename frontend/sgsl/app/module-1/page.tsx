@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import MediaPipeScripts from '@/components/MediaPipeScripts';
 import { useRouter } from 'next/navigation';
 import GuideVisibilityMask from '@/components/GuideVisibilityMask';
+import LessonCompletionModal from '@/components/LessonCompletionModal';
 import StaticLetterPractice from '@/components/StaticLetterPractice';
 import ModuleNav from '@/components/ModuleNav';
 import IntroLessonView from '@/components/IntroLessonView';
@@ -63,6 +64,11 @@ export default function ModuleOnePage() {
 function Module1Container() {
   const lessons = MODULE_ONE_LESSONS;
   const [currentLessonId, setCurrentLessonId] = useState<string>(lessons[0].id);
+  const [lessonRunKey, setLessonRunKey] = useState(0);
+  const [suppressedLessonId, setSuppressedLessonId] = useState<string | null>(
+    null,
+  );
+  const router = useRouter();
   const {
     profile,
     loading,
@@ -86,9 +92,47 @@ function Module1Container() {
     const index = lessons.findIndex((lesson) => lesson.id === currentLesson.id);
     return index >= 0 ? lessons[index + 1]?.id ?? null : null;
   }, [currentLesson.id, lessons]);
+  const completionModalOpen =
+    isCompleted && suppressedLessonId !== currentLesson.id;
+
+  const repeatLabel =
+    currentLesson.type === 'gym'
+      ? 'Repeat current practice'
+      : currentLesson.type === 'test'
+        ? 'Repeat current test'
+        : 'Repeat current lesson';
+  const isFinalLesson = currentLesson.id === 'final-test';
+  const completionTitle = isFinalLesson
+    ? 'Module 1 complete'
+    : `${currentLesson.title} complete`;
+  const completionMessage = isFinalLesson
+    ? 'Great work. Continue to Module 2 to start fingerspelling.'
+    : 'You can repeat this step or continue to the next one.';
+  const moveOnLabel = isFinalLesson ? 'Go to Module 2' : 'Move on to next';
 
   function markLessonComplete() {
     completeLesson(`module1-${currentLesson.id}`, 50);
+  }
+
+  function openLesson(lessonId: string) {
+    setSuppressedLessonId(null);
+    setCurrentLessonId(lessonId);
+  }
+
+  function handleRepeatCurrent() {
+    setSuppressedLessonId(currentLesson.id);
+    setLessonRunKey((prev) => prev + 1);
+  }
+
+  function handleMoveOn() {
+    setSuppressedLessonId(null);
+    if (nextLessonId) {
+      openLesson(nextLessonId);
+      return;
+    }
+    if (isFinalLesson) {
+      router.push('/module-2');
+    }
   }
 
   return (
@@ -148,7 +192,7 @@ function Module1Container() {
               return (
                 <button
                   key={lesson.id}
-                  onClick={() => setCurrentLessonId(lesson.id)}
+                  onClick={() => openLesson(lesson.id)}
                   className={`w-full text-left rounded-xl px-3 py-2.5 text-xs mb-1 flex items-start gap-3 border ${
                     active
                       ? 'bg-slate-100 border-blue-300'
@@ -212,7 +256,7 @@ function Module1Container() {
             <div className="mx-auto w-full max-w-[1280px]">
               {currentLesson.type === 'interactive' && (
                 <InteractiveLessonView
-                  key={currentLesson.id}
+                  key={`${currentLesson.id}-${lessonRunKey}`}
                   lesson={currentLesson}
                   isCompleted={isCompleted}
                   onComplete={markLessonComplete}
@@ -227,14 +271,14 @@ function Module1Container() {
 
               {currentLesson.type === 'intro' && (
                 <IntroLessonView
-                  key={currentLesson.id}
+                  key={`${currentLesson.id}-${lessonRunKey}`}
                   onComplete={markLessonComplete}
                 />
               )}
 
               {currentLesson.type === 'gym' && (
                 <PracticeGymView
-                  key={currentLesson.id}
+                  key={`${currentLesson.id}-${lessonRunKey}`}
                   letters={currentLesson.letters}
                   isCompleted={isCompleted}
                   onComplete={markLessonComplete}
@@ -249,7 +293,7 @@ function Module1Container() {
 
               {currentLesson.type === 'test' && (
                 <FinalTestView
-                  key={currentLesson.id}
+                  key={`${currentLesson.id}-${lessonRunKey}`}
                   letters={currentLesson.letters}
                   isCompleted={isCompleted}
                   onComplete={markLessonComplete}
@@ -260,20 +304,15 @@ function Module1Container() {
         </main>
       </div>
 
-      {isCompleted && nextLessonId && (
-        <div className="fixed bottom-4 left-0 right-0 flex justify-center animate-in slide-in-from-bottom">
-          <div className="flex items-center gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-lg">
-            <span className="font-semibold">Lesson Complete! +50 XP</span>
-            <button
-              type="button"
-              onClick={() => setCurrentLessonId(nextLessonId)}
-              className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-400"
-            >
-              Continue to next lesson →
-            </button>
-          </div>
-        </div>
-      )}
+      <LessonCompletionModal
+        open={completionModalOpen}
+        title={completionTitle}
+        message={completionMessage}
+        repeatLabel={repeatLabel}
+        moveOnLabel={moveOnLabel}
+        onRepeat={handleRepeatCurrent}
+        onMoveOn={handleMoveOn}
+      />
     </>
   );
 }
@@ -1404,8 +1443,6 @@ function FinalTestView({
     'idle',
   );
   const [results, setResults] = useState<Result[]>([]);
-  const [showModuleTwoPrompt, setShowModuleTwoPrompt] = useState(false);
-  const router = useRouter();
 
   const holdStartRef = useRef<number | null>(null);
   const lastHitRef = useRef<number | null>(null);
@@ -1473,7 +1510,6 @@ function FinalTestView({
     if (testState !== 'finished' || finalScore == null) return;
     if (!isCompleted && finalScore / letters.length >= 0.9) {
       onComplete();
-      setShowModuleTwoPrompt(true);
     }
   }, [testState, finalScore, isCompleted, letters.length, onComplete]);
 
@@ -1516,7 +1552,6 @@ function FinalTestView({
             <button
               type="button"
               onClick={() => {
-                setShowModuleTwoPrompt(false);
                 setTestState('running');
                 setTargetIndex(0);
                 setScore(0);
@@ -1622,7 +1657,6 @@ function FinalTestView({
             <button
               type="button"
               onClick={() => {
-                setShowModuleTwoPrompt(false);
                 setTargetIndex(0);
                 setScore(0);
                 setFinalScore(null);
@@ -1655,45 +1689,6 @@ function FinalTestView({
           </button>
         )}
       </div>
-
-      {showModuleTwoPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="w-full max-w-md rounded-2xl border border-emerald-200 bg-white p-5 shadow-xl"
-          >
-            <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-600">
-              Module 1 complete
-            </p>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">
-              Great work. Proceed to Module 2.
-            </h3>
-            <p className="mt-2 text-sm text-slate-600">
-              You have unlocked Module 2: Fingerspelling.
-            </p>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowModuleTwoPrompt(false);
-                  router.push('/module-2');
-                }}
-                className="inline-flex items-center rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-400"
-              >
-                Go to Module 2
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowModuleTwoPrompt(false)}
-                className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-800"
-              >
-                Stay here
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
