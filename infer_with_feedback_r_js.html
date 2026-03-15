@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Infer with Feedback R (JS)</title>
+  <style>
+    :root {
+      --bg: #070e1f;
+      --panel: #101a30;
+      --border: #233257;
+      --text: #e7eefc;
+      --muted: #9db0d7;
+      --ok: #53d28e;
+      --warn: #ffd166;
+      --bad: #ff8b8b;
+      --accent: #4ea5ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--text);
+      background: radial-gradient(1300px 900px at 10% 8%, #13284a, var(--bg));
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .panel {
+      background: rgba(16, 26, 48, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+      letter-spacing: 0.02em;
+    }
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .row {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    button, input {
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #0c1730;
+      color: var(--text);
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    button {
+      cursor: pointer;
+      transition: border-color 0.15s ease, transform 0.15s ease;
+    }
+    button:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .primary { border-color: #2a6bc7; background: #174487; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #0b1630;
+      padding: 10px;
+    }
+    .k {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    .v {
+      margin-top: 4px;
+      font-weight: 600;
+      font-size: 15px;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .video-wrap {
+      position: relative;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      aspect-ratio: 4 / 3;
+    }
+    video, canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    #statusText.ok { color: var(--ok); }
+    #statusText.warn { color: var(--warn); }
+    #statusText.bad { color: var(--bad); }
+    code {
+      background: #0f1d3d;
+      border: 1px solid #1d305e;
+      border-radius: 6px;
+      padding: 2px 6px;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>R Feedback Inference (Browser JS)</h1>
+      <p>
+        Runs the mini checks in browser with MediaPipe Hands JS using exported model JSON files
+        (<code>models/r_*_js_browser.json</code>).
+      </p>
+      <p style="margin-top:8px;">Serve this file over localhost (for camera + fetch), for example: <code>python3 -m http.server 8080</code></p>
+
+      <div class="row">
+        <button id="loadBtn">Reload Models</button>
+        <button id="cameraBtn" class="primary">Start Camera</button>
+        <label for="miniMargin">Mini Margin</label>
+        <input id="miniMargin" type="number" min="0" max="2" step="0.01" value="0.10" />
+      </div>
+
+      <div class="grid">
+        <div class="card"><div class="k">Status</div><div class="v warn" id="statusText">Idle</div></div>
+        <div class="card"><div class="k">Models</div><div class="v" id="modelsText">Not loaded</div></div>
+        <div class="card"><div class="k">Current Stage</div><div class="v" id="stageText">-</div></div>
+        <div class="card"><div class="k">Fix</div><div class="v" id="fixText">Load models and start camera.</div></div>
+        <div class="card"><div class="k">Checks</div><div class="v" id="checksText">vertical:- cross:- tuck:- thumb:-</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="video-wrap">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PALM_LANDMARKS = [0, 5, 9, 13, 17];
+    const CHECK_CONFIGS = [
+      {
+        id: "vertical",
+        label: "Vertical",
+        modelUrl: "models/r_vertical_js_browser.json",
+        landmarks: [0, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17],
+        fix: "Keep your index and middle fingers upright and vertical.",
+      },
+      {
+        id: "cross",
+        label: "Cross",
+        modelUrl: "models/r_cross_js_browser.json",
+        landmarks: [0, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17],
+        fix: "Hold upright and cross your index and middle fingers.",
+      },
+      {
+        id: "tuck",
+        label: "Tuck",
+        modelUrl: "models/r_tuck_js_browser.json",
+        landmarks: [0, 5, 9, 13, 14, 15, 16, 17, 18, 19, 20],
+        fix: "Curl your pinky and ring fingers into your palm.",
+      },
+      {
+        id: "thumb",
+        label: "Thumb",
+        modelUrl: "models/r_thumb_js_browser.json",
+        landmarks: [0, 1, 2, 3, 4, 5, 9, 13, 14, 15, 16, 17, 18, 19, 20],
+        fix: "Place thumb over pinky and ring finger.",
+      },
+    ];
+
+    const videoEl = document.getElementById("video");
+    const canvasEl = document.getElementById("overlay");
+    const ctx = canvasEl.getContext("2d");
+    const loadBtn = document.getElementById("loadBtn");
+    const cameraBtn = document.getElementById("cameraBtn");
+    const miniMarginInput = document.getElementById("miniMargin");
+    const statusText = document.getElementById("statusText");
+    const modelsText = document.getElementById("modelsText");
+    const stageText = document.getElementById("stageText");
+    const fixText = document.getElementById("fixText");
+    const checksText = document.getElementById("checksText");
+
+    let stream = null;
+    let hands = null;
+    let rafId = null;
+    let running = false;
+    let loadedChecks = [];
+    let missingChecks = [];
+
+    function setStatus(text, level) {
+      statusText.textContent = text;
+      statusText.className = `v ${level}`;
+    }
+
+    function parseConnection(conn) {
+      if (Array.isArray(conn) && conn.length >= 2) return [conn[0], conn[1]];
+      if (conn && typeof conn === "object") {
+        if (typeof conn.start === "number" && typeof conn.end === "number") {
+          return [conn.start, conn.end];
+        }
+      }
+      return null;
+    }
+
+    function buildSubsetConnections(subsetIndices) {
+      const allConnections = Array.isArray(window.HAND_CONNECTIONS) ? window.HAND_CONNECTIONS : [];
+      const subset = new Set(subsetIndices);
+      const out = [];
+      for (const conn of allConnections) {
+        const pair = parseConnection(conn);
+        if (!pair) continue;
+        const [a, b] = pair;
+        if (subset.has(a) && subset.has(b)) out.push([a, b]);
+      }
+      return out;
+    }
+
+    function norm3(v) {
+      return Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    }
+
+    function sub3(a, b) {
+      return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    }
+
+    function extractSubsetFeature(handLandmarks, subsetIndices) {
+      const pts = new Array(21);
+      for (let i = 0; i < 21; i++) {
+        const p = handLandmarks[i];
+        pts[i] = [p.x, p.y, p.z || 0.0];
+      }
+
+      let cx = 0.0;
+      let cy = 0.0;
+      let cz = 0.0;
+      for (const idx of PALM_LANDMARKS) {
+        cx += pts[idx][0];
+        cy += pts[idx][1];
+        cz += pts[idx][2];
+      }
+      cx /= PALM_LANDMARKS.length;
+      cy /= PALM_LANDMARKS.length;
+      cz /= PALM_LANDMARKS.length;
+
+      for (let i = 0; i < 21; i++) {
+        pts[i][0] -= cx;
+        pts[i][1] -= cy;
+        pts[i][2] -= cz;
+      }
+
+      let palmWidth = norm3(sub3(pts[5], pts[17]));
+      if (palmWidth < 1e-6) {
+        let maxNorm = 0.0;
+        for (let i = 0; i < 21; i++) maxNorm = Math.max(maxNorm, norm3(pts[i]));
+        palmWidth = maxNorm;
+      }
+      if (palmWidth < 1e-6) palmWidth = 1.0;
+
+      const out = [];
+      for (const idx of subsetIndices) {
+        out.push(pts[idx][0] / palmWidth);
+        out.push(pts[idx][1] / palmWidth);
+        out.push(pts[idx][2] / palmWidth);
+      }
+      return out;
+    }
+
+    function sigmoid(x) {
+      if (x >= 0) {
+        const z = Math.exp(-x);
+        return 1 / (1 + z);
+      }
+      const z = Math.exp(x);
+      return z / (1 + z);
+    }
+
+    function predictBinary(check, feats) {
+      const model = check.model;
+      const mean = model.scaler.mean;
+      const scale = model.scaler.scale;
+      const coef = model.svm.coef;
+      let score = model.svm.intercept;
+
+      if (!Array.isArray(feats) || feats.length !== model.feature_dim) {
+        throw new Error(
+          `${check.id}: feature length mismatch, expected ${model.feature_dim}, got ${feats.length}`
+        );
+      }
+
+      for (let i = 0; i < feats.length; i++) {
+        const denom = Math.abs(scale[i]) < 1e-12 ? 1.0 : scale[i];
+        const xz = (feats[i] - mean[i]) / denom;
+        score += coef[i] * xz;
+      }
+
+      const predIdx = score >= 0 ? model.positive_class_index : model.negative_class_index;
+      const predLabel = model.class_names[predIdx];
+      const presentScore =
+        model.present_index === model.positive_class_index ? sigmoid(score) : 1.0 - sigmoid(score);
+      const margin = Math.abs(score);
+      return { predLabel, margin, presentScore, score };
+    }
+
+    function drawBaseHand(hand) {
+      const width = videoEl.videoWidth || 960;
+      const height = videoEl.videoHeight || 720;
+      if (canvasEl.width !== width || canvasEl.height !== height) {
+        canvasEl.width = width;
+        canvasEl.height = height;
+      }
+      ctx.clearRect(0, 0, width, height);
+      if (!hand) return;
+
+      const DU = window.DrawingUtils ? new window.DrawingUtils(ctx) : null;
+      if (!DU || !window.HAND_CONNECTIONS) return;
+      DU.drawConnectors(hand, window.HAND_CONNECTIONS, { lineWidth: 3 });
+      DU.drawLandmarks(hand, { radius: 2.2, lineWidth: 1 });
+    }
+
+    function drawFailingSubset(hand, check) {
+      if (!hand || !check) return;
+      const width = canvasEl.width;
+      const height = canvasEl.height;
+
+      ctx.save();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "rgba(255, 110, 110, 0.95)";
+      for (const [a, b] of check.connections) {
+        const pa = hand[a];
+        const pb = hand[b];
+        if (!pa || !pb) continue;
+        ctx.beginPath();
+        ctx.moveTo(pa.x * width, pa.y * height);
+        ctx.lineTo(pb.x * width, pb.y * height);
+        ctx.stroke();
+      }
+
+      for (const idx of check.landmarks) {
+        const p = hand[idx];
+        if (!p) continue;
+        ctx.beginPath();
+        ctx.fillStyle = PALM_LANDMARKS.includes(idx) ? "rgba(160, 255, 210, 1.0)" : "rgba(255, 140, 100, 1.0)";
+        ctx.arc(p.x * width, p.y * height, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    async function loadModels() {
+      loadedChecks = [];
+      missingChecks = [];
+      setStatus("Loading models...", "warn");
+
+      for (const cfg of CHECK_CONFIGS) {
+        try {
+          const res = await fetch(cfg.modelUrl, { cache: "no-store" });
+          if (!res.ok) {
+            missingChecks.push(`${cfg.id} (${res.status})`);
+            continue;
+          }
+          const model = await res.json();
+          if (!model || model.format !== "linear_svc_binary_v1") {
+            missingChecks.push(`${cfg.id} (bad format)`);
+            continue;
+          }
+          loadedChecks.push({
+            ...cfg,
+            model,
+            connections: buildSubsetConnections(cfg.landmarks),
+          });
+        } catch (err) {
+          missingChecks.push(`${cfg.id} (fetch error)`);
+        }
+      }
+
+      const loadedIds = loadedChecks.map((c) => c.id).join(", ");
+      const missingIds = missingChecks.join(", ");
+      modelsText.textContent =
+        `loaded=${loadedChecks.length}/${CHECK_CONFIGS.length}` +
+        (loadedIds ? ` | ${loadedIds}` : "") +
+        (missingIds ? ` | missing: ${missingIds}` : "");
+
+      if (loadedChecks.length === CHECK_CONFIGS.length) {
+        setStatus("Models loaded", "ok");
+      } else if (loadedChecks.length > 0) {
+        setStatus("Partial models loaded", "warn");
+      } else {
+        setStatus("No models loaded", "bad");
+      }
+    }
+
+    async function startCamera() {
+      if (running) return true;
+      if (loadedChecks.length === 0) {
+        setStatus("Load models first.", "bad");
+        return false;
+      }
+      if (!window.Hands) {
+        setStatus("MediaPipe Hands script not loaded.", "bad");
+        return false;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus("Camera API unavailable in this browser/context.", "bad");
+        return false;
+      }
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 960, height: 720 },
+          audio: false,
+        });
+        videoEl.srcObject = stream;
+        await videoEl.play();
+      } catch (err) {
+        setStatus(`Camera error: ${err instanceof Error ? err.message : "unknown"}`, "bad");
+        return false;
+      }
+
+      hands = new window.Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+      });
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6,
+      });
+
+      hands.onResults((results) => {
+        const hasHand = Boolean(results.multiHandLandmarks && results.multiHandLandmarks.length);
+        const hand = hasHand ? results.multiHandLandmarks[0] : null;
+        drawBaseHand(hand);
+
+        if (!hand) {
+          stageText.textContent = "-";
+          fixText.textContent = "Show one hand clearly in frame.";
+          checksText.textContent = "vertical:- cross:- tuck:- thumb:-";
+          setStatus("No hand detected", "warn");
+          return;
+        }
+
+        const miniMargin = Math.max(0.0, Number(miniMarginInput.value || "0.1"));
+        const mirrored = hand.map((p) => ({ x: 1 - p.x, y: p.y, z: p.z || 0.0 }));
+
+        const details = [];
+        let failingCheck = null;
+
+        for (const check of loadedChecks) {
+          try {
+            const feats = extractSubsetFeature(mirrored, check.landmarks);
+            const out = predictBinary(check, feats);
+            const passed = out.predLabel === "present" && out.margin >= miniMargin;
+            details.push(`${check.id}:${passed ? "ok" : "x"}(${out.margin.toFixed(2)})`);
+
+            if (!passed && !failingCheck) {
+              failingCheck = check;
+            }
+          } catch (err) {
+            details.push(`${check.id}:err`);
+            if (!failingCheck) failingCheck = check;
+          }
+        }
+
+        checksText.textContent = details.join(" ");
+
+        if (!failingCheck && loadedChecks.length === CHECK_CONFIGS.length) {
+          stageText.textContent = "Pass";
+          fixText.textContent = "Good job. Hold steady.";
+          setStatus("R correct (all 4 JS mini checks pass)", "ok");
+        } else if (!failingCheck) {
+          stageText.textContent = "Partial";
+          fixText.textContent = "Some mini-models are missing. Load all model JSON files for full feedback.";
+          setStatus("R not fully validated (partial checks)", "warn");
+        } else {
+          stageText.textContent = failingCheck.label;
+          fixText.textContent = failingCheck.fix;
+          drawFailingSubset(hand, failingCheck);
+          setStatus("R needs correction", "warn");
+        }
+      });
+
+      running = true;
+      setStatus("Camera running", "ok");
+
+      async function tick() {
+        if (!running || !hands) return;
+        if (videoEl.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          try {
+            await hands.send({ image: videoEl });
+          } catch (err) {
+            setStatus(`Tracking error: ${err instanceof Error ? err.message : "unknown"}`, "bad");
+          }
+        }
+        rafId = requestAnimationFrame(tick);
+      }
+      rafId = requestAnimationFrame(tick);
+      return true;
+    }
+
+    function stopCamera() {
+      running = false;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      if (hands && typeof hands.close === "function") {
+        hands.close();
+      }
+      hands = null;
+      if (stream) {
+        for (const track of stream.getTracks()) track.stop();
+      }
+      stream = null;
+      videoEl.srcObject = null;
+      ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+      setStatus("Camera stopped", "warn");
+    }
+
+    loadBtn.addEventListener("click", () => {
+      void loadModels();
+    });
+
+    cameraBtn.addEventListener("click", async () => {
+      if (!running) {
+        const started = await startCamera();
+        if (started) cameraBtn.textContent = "Stop Camera";
+      } else {
+        stopCamera();
+        cameraBtn.textContent = "Start Camera";
+      }
+    });
+
+    window.addEventListener("beforeunload", () => {
+      stopCamera();
+    });
+
+    void loadModels();
+  </script>
+</body>
+</html>

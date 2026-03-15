@@ -12,7 +12,6 @@ interface FingerspellingPracticeProps {
   timeLimit?: number;
   onComplete: (metrics: { timeTakenMs: number; mistakes: number }) => void;
   onTimeOut?: () => void;
-  onExit: () => void;
 }
 
 type LetterState = 'pending' | 'success';
@@ -25,7 +24,6 @@ export default function FingerspellingPractice({
   timeLimit = 30,
   onComplete,
   onTimeOut,
-  onExit,
 }: FingerspellingPracticeProps) {
   const letters = useMemo(() => word.toUpperCase().split(''), [word]);
   const { videoRef, predictedLetter, confidence, error, running, landmarks } =
@@ -90,14 +88,6 @@ export default function FingerspellingPractice({
     lastCorrectRef.current = null;
     activeLetterStartedAtRef.current = Date.now();
   }, [activeIndex, letters.length]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onExit();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onExit]);
 
   useEffect(() => {
     if (mode !== 'test') return;
@@ -275,26 +265,14 @@ export default function FingerspellingPractice({
   }, [landmarkPoints, videoRef]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-            Target word
-          </p>
-          <h3 className="text-2xl font-semibold tracking-[0.18em] text-slate-900 leading-none">
-            {word}
-          </h3>
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <button
-            type="button"
-            onClick={onExit}
-            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-800"
-          >
-            Exit
-          </button>
-          <p className="text-[10px] text-slate-400">Press Esc on desktop</p>
-        </div>
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+      <div className="space-y-1">
+        <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+          Target word
+        </p>
+        <h3 className="text-2xl font-semibold tracking-[0.18em] text-slate-900 leading-none">
+          {word}
+        </h3>
       </div>
       {mode === 'test' && (
         <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">

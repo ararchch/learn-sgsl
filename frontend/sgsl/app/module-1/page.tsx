@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import Script from 'next/script';
+import MediaPipeScripts from '@/components/MediaPipeScripts';
 import { useRouter } from 'next/navigation';
+import GuideVisibilityMask from '@/components/GuideVisibilityMask';
 import StaticLetterPractice from '@/components/StaticLetterPractice';
 import ModuleNav from '@/components/ModuleNav';
 import IntroLessonView from '@/components/IntroLessonView';
@@ -11,7 +12,6 @@ import {
   MODULE1_LESSON_TOUR_VERSION,
   MODULE1_PRACTICE_TOUR_VERSION,
 } from '@/lib/module1Tour';
-import { hasCompletedOnboarding } from '@/lib/onboarding';
 import {
   MODULE_ONE_LESSONS,
   LessonConfig,
@@ -61,14 +61,12 @@ export default function ModuleOnePage() {
 }
 
 function Module1Container() {
-  const router = useRouter();
   const lessons = MODULE_ONE_LESSONS;
   const [currentLessonId, setCurrentLessonId] = useState<string>(lessons[0].id);
   const {
     profile,
     loading,
     completeLesson,
-    unlockModule,
     completeModule1LessonTour,
     completeModule1PracticeTour,
   } = useUserProgress();
@@ -81,7 +79,6 @@ function Module1Container() {
     completedLessons.includes(`module1-${lesson.id}`),
   ).length;
   const moduleProgress = Math.round((completedCount / lessons.length) * 100);
-  const moduleOneComplete = completedCount === lessons.length;
 
   const isCompleted = completedLessons.includes(`module1-${currentLesson.id}`);
 
@@ -94,29 +91,9 @@ function Module1Container() {
     completeLesson(`module1-${currentLesson.id}`, 50);
   }
 
-  useEffect(() => {
-    if (loading) return;
-    if (!profile) return;
-    if (hasCompletedOnboarding(profile)) return;
-    router.replace(`/onboarding?next=${encodeURIComponent('/module-1')}`);
-  }, [loading, profile, router]);
-
-  useEffect(() => {
-    if (moduleOneComplete) {
-      unlockModule(2);
-    }
-  }, [moduleOneComplete, unlockModule]);
-
   return (
     <>
-      <Script
-        src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
-        strategy="afterInteractive"
-      />
-      <Script
-        src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
-        strategy="afterInteractive"
-      />
+      <MediaPipeScripts />
 
       <div className="min-h-screen bg-slate-50 text-slate-900 flex">
         <aside className="hidden md:flex w-72 flex-col border-r border-slate-200 bg-white">
@@ -242,7 +219,7 @@ function Module1Container() {
                   tourVersionCompleted={
                     loading || !profile
                       ? null
-                      : profile.module1LessonTourVersionCompleted
+                      : profile.module1lessontour
                   }
                   onCompleteLessonTour={completeModule1LessonTour}
                 />
@@ -264,7 +241,7 @@ function Module1Container() {
                   practiceTourVersionCompleted={
                     loading || !profile
                       ? null
-                      : profile.module1PracticeTourVersionCompleted
+                      : profile.module1practice
                   }
                   onCompletePracticeTour={completeModule1PracticeTour}
                 />
@@ -276,7 +253,6 @@ function Module1Container() {
                   letters={currentLesson.letters}
                   isCompleted={isCompleted}
                   onComplete={markLessonComplete}
-                  onUnlockModule={unlockModule}
                 />
               )}
             </div>
@@ -1291,53 +1267,37 @@ function PracticeGymView({
           className={`rounded-2xl border p-4 md:p-5 ${
             isPracticeGuideTourStep
               ? practiceGymTourCardHighlightClass
-              : showHint
-                ? 'border-slate-200 bg-white'
-                : 'border-slate-300 bg-slate-100'
+              : 'border-slate-200 bg-white'
           }`}
         >
-          {showHint ? (
-            <>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                  Guide: Sign {targetLetter}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowHint(false)}
-                  className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-                >
-                  Hide guide
-                </button>
-              </div>
-              <img
-                src={`/images/${targetLetter}.png`}
-                alt="Guide"
-                className="mt-3 w-full rounded-lg"
-                style={{ transform: 'scaleX(-1)' }}
-              />
-              <div className="mt-4 text-xs text-slate-500">
-                Keep your wrist relaxed and fingers visible.
-              </div>
-            </>
-          ) : (
-            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-200/70 px-6 py-8 text-center">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                Guide hidden
-              </p>
-              <p className="mt-3 max-w-xs text-sm text-slate-600">
-                Show the guide again whenever you want the reference image for
-                sign {targetLetter}.
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowHint(true)}
-                className="mt-6 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-              >
-                Show guide
-              </button>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+              Guide: Sign {targetLetter}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowHint((prev) => !prev)}
+              className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+            >
+              {showHint ? 'Hide guide' : 'Show guide'}
+            </button>
+          </div>
+
+          <GuideVisibilityMask
+            hidden={!showHint}
+            className="mt-3"
+            description={`Reveal the guide whenever you want the reference image for sign ${targetLetter}.`}
+          >
+            <img
+              src={`/images/${targetLetter}.png`}
+              alt="Guide"
+              className="w-full rounded-lg"
+              style={{ transform: 'scaleX(-1)' }}
+            />
+            <div className="mt-4 text-xs text-slate-500">
+              Keep your wrist relaxed and fingers visible.
             </div>
-          )}
+          </GuideVisibilityMask>
         </div>
       </div>
 
@@ -1429,12 +1389,10 @@ function FinalTestView({
   letters,
   isCompleted,
   onComplete,
-  onUnlockModule,
 }: {
   letters: string[];
   isCompleted: boolean;
   onComplete: () => void;
-  onUnlockModule: (moduleId: number) => void;
 }) {
   type Result = { letter: string; status: 'pass' | 'fail' };
   const [targetIndex, setTargetIndex] = useState(0);
@@ -1515,17 +1473,9 @@ function FinalTestView({
     if (testState !== 'finished' || finalScore == null) return;
     if (!isCompleted && finalScore / letters.length >= 0.9) {
       onComplete();
-      onUnlockModule(2);
       setShowModuleTwoPrompt(true);
     }
-  }, [
-    testState,
-    finalScore,
-    isCompleted,
-    letters.length,
-    onComplete,
-    onUnlockModule,
-  ]);
+  }, [testState, finalScore, isCompleted, letters.length, onComplete]);
 
   function handlePrediction(letter: string) {
     if (testState !== 'running' || status === 'success' || letter !== targetLetter)

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Script from 'next/script';
+import MediaPipeScripts from '@/components/MediaPipeScripts';
 import StaticLetterPractice from '@/components/StaticLetterPractice';
 
 type LessonType = 'teaching' | 'practice' | 'testing';
@@ -79,15 +79,7 @@ export default function ModuleOnePage() {
 
   return (
     <>
-      {/* Load Mediapipe like index_seq.html */}
-      <Script
-        src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
-        strategy="afterInteractive"
-      />
-      <Script
-        src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
-        strategy="afterInteractive"
-      />
+      <MediaPipeScripts />
 
       <div className="min-h-screen bg-slate-50 text-slate-900 flex">
         {/* LHS: module nav + progress */}

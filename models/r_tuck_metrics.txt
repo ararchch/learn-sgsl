@@ -1,0 +1,18 @@
+Model: linear svm
+
+Classes:
+["absent", "present"]
+
+Classification report:
+              precision    recall  f1-score   support
+
+      absent     1.0000    1.0000    1.0000        95
+     present     1.0000    1.0000    1.0000       121
+
+    accuracy                         1.0000       216
+   macro avg     1.0000    1.0000    1.0000       216
+weighted avg     1.0000    1.0000    1.0000       216
+
+Confusion matrix:
+95 0
+0 121

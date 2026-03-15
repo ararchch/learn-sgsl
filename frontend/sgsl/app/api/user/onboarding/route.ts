@@ -1,20 +1,16 @@
 import { NextResponse } from 'next/server';
-import { createUser, getUser, updateOnboarding } from '@/lib/db';
-import {
-  ONBOARDING_STEP_IDS,
-  ONBOARDING_VERSION,
-  type OnboardingStepId,
-} from '@/lib/onboarding';
+import { createUser, getUser, updateUser } from '@/lib/db';
+import { ONBOARDING_VERSION } from '@/lib/onboarding';
 
-const ONBOARDING_STEP_SET = new Set<OnboardingStepId>(ONBOARDING_STEP_IDS);
+function toErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown error';
+}
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const username = String(body?.username ?? '').trim();
     const action = String(body?.action ?? '').trim();
-    const stepId = String(body?.stepId ?? '').trim();
-    const durationMs = Number(body?.durationMs ?? 0);
 
     if (!username) {
       return NextResponse.json(
@@ -22,95 +18,25 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    if (!action) {
-      return NextResponse.json(
-        { error: 'Action is required.' },
-        { status: 400 },
-      );
-    }
 
     const existing = (await getUser(username)) ?? (await createUser(username));
 
-    const now = new Date().toISOString();
-
-    if (action === 'start') {
-      const profile = await updateOnboarding(username, {
-        onboardingStartedAt: existing.onboardingStartedAt ?? now,
-        onboardingCompletedAt: null,
-        onboardingDurationMs: null,
-      });
-      if (!profile) {
-        return NextResponse.json(
-          { error: 'Unable to update onboarding.' },
-          { status: 500 },
-        );
-      }
-      return NextResponse.json(profile, { status: 200 });
-    }
-
-    if (action === 'step_complete') {
-      if (!ONBOARDING_STEP_SET.has(stepId as OnboardingStepId)) {
-        return NextResponse.json(
-          { error: 'Invalid onboarding step.' },
-          { status: 400 },
-        );
-      }
-      const profile = await updateOnboarding(username, {
-        onboardingStepsCompleted: [stepId as OnboardingStepId],
-      });
-      if (!profile) {
-        return NextResponse.json(
-          { error: 'Unable to update onboarding.' },
-          { status: 500 },
-        );
-      }
-      return NextResponse.json(profile, { status: 200 });
-    }
-
     if (action === 'complete') {
-      const duration =
-        Number.isFinite(durationMs) && durationMs >= 0
-          ? Math.round(durationMs)
-          : null;
+      const profile = await updateUser(username, {
+        onboardingVersionCompleted: Math.max(
+          existing.onboardingVersionCompleted,
+          ONBOARDING_VERSION,
+        ),
+      });
 
-      const profile = await updateOnboarding(
-        username,
-        {
-          onboardingVersionCompleted: ONBOARDING_VERSION,
-          onboardingStartedAt: existing.onboardingStartedAt ?? now,
-          onboardingCompletedAt: now,
-          onboardingDurationMs: duration,
-          onboardingStepsCompleted: [...ONBOARDING_STEP_IDS],
-        },
-        { mergeSteps: true },
-      );
-      if (!profile) {
-        return NextResponse.json(
-          { error: 'Unable to update onboarding.' },
-          { status: 500 },
-        );
-      }
       return NextResponse.json(profile, { status: 200 });
     }
 
     if (action === 'reset') {
-      const profile = await updateOnboarding(
-        username,
-        {
-          onboardingVersionCompleted: 0,
-          onboardingStartedAt: null,
-          onboardingCompletedAt: null,
-          onboardingDurationMs: null,
-          onboardingStepsCompleted: [],
-        },
-        { mergeSteps: false },
-      );
-      if (!profile) {
-        return NextResponse.json(
-          { error: 'Unable to update onboarding.' },
-          { status: 500 },
-        );
-      }
+      const profile = await updateUser(username, {
+        onboardingVersionCompleted: 0,
+      });
+
       return NextResponse.json(profile, { status: 200 });
     }
 
@@ -118,7 +44,12 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Onboarding update error', error);
     return NextResponse.json(
-      { error: 'Unable to update onboarding.' },
+      {
+        error:
+          process.env.NODE_ENV === 'production'
+            ? 'Unable to update onboarding.'
+            : `Unable to update onboarding. ${toErrorMessage(error)}`,
+      },
       { status: 500 },
     );
   }

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { getMediaPipeHandsAssetUrl } from '@/lib/mediapipe';
+import { isExpectedPlayInterruption } from '@/lib/mediaPlayback';
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
@@ -169,13 +171,13 @@ export function useHandRecognition() {
         if (cancelled) return;
       } catch (error: unknown) {
         if (cancelled) return;
+        if (isExpectedPlayInterruption(error)) return;
         setError(getErrorMessage(error, 'Unable to access camera'));
         return;
       }
 
       const hands = new HandsCtor({
-        locateFile: (file: string) =>
-          `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+        locateFile: getMediaPipeHandsAssetUrl,
       });
       hands.setOptions({
         maxNumHands: 1,

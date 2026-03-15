@@ -1,19 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import Image from 'next/image';
-import Script from 'next/script';
-import { useRouter } from 'next/navigation';
+import MediaPipeScripts from '@/components/MediaPipeScripts';
+import GuideVisibilityMask from '@/components/GuideVisibilityMask';
 import StaticLetterPractice, {
   type PredictResponse,
+  type RMiniFeedback,
 } from '@/components/StaticLetterPractice';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import {
   MODULE_ONE_SIGNS,
   type ModuleOneLetter,
 } from '@/lib/moduleOneSigns';
-import { hasCompletedOnboarding } from '@/lib/onboarding';
 import { PLAYGROUND_TOUR_VERSION } from '@/lib/module1Tour';
 
 const PLAYGROUND_TOUR_STEPS = [
@@ -45,13 +44,24 @@ type FeedbackState = 'idle' | 'correct' | 'incorrect';
 function getFeedbackState(
   prediction: PredictResponse | null,
   targetLetter: ModuleOneLetter,
+  rMiniFeedback: RMiniFeedback | null,
 ): FeedbackState {
+  if (targetLetter === 'R') {
+    if (!rMiniFeedback || rMiniFeedback.status === 'loading') return 'idle';
+    return rMiniFeedback.status === 'pass' ? 'correct' : 'incorrect';
+  }
   if (!prediction) return 'idle';
   return prediction.letter === targetLetter ? 'correct' : 'incorrect';
 }
 
+function summarizeRMiniChecks(feedback: RMiniFeedback | null): string {
+  if (!feedback || feedback.checks.length === 0) return '--';
+  return feedback.checks
+    .map((check) => `${check.id}:${check.passed ? 'ok' : 'x'}(${check.margin.toFixed(2)})`)
+    .join(' ');
+}
+
 export default function PlaygroundPage() {
-  const router = useRouter();
   const {
     profile,
     loading,
@@ -66,6 +76,8 @@ export default function PlaygroundPage() {
   const [showGuide, setShowGuide] = useState(true);
   const [currentPrediction, setCurrentPrediction] =
     useState<PredictResponse | null>(null);
+  const [currentRMiniFeedback, setCurrentRMiniFeedback] =
+    useState<RMiniFeedback | null>(null);
   const [tourOpen, setTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
   const [tourDismissedThisMount, setTourDismissedThisMount] = useState(false);
@@ -84,16 +96,22 @@ export default function PlaygroundPage() {
   const tourPopoverRef = useRef<HTMLDivElement | null>(null);
 
   const activeSign = MODULE_ONE_SIGNS[activeIndex] ?? MODULE_ONE_SIGNS[0];
-  const feedbackState = getFeedbackState(currentPrediction, activeSign.letter);
+  const isRTarget = activeSign.letter === 'R';
+  const feedbackState = getFeedbackState(
+    currentPrediction,
+    activeSign.letter,
+    currentRMiniFeedback,
+  );
   const confidenceLabel = currentPrediction
     ? `${(currentPrediction.confidence * 100).toFixed(1)}%`
     : '--';
+  const rMiniChecksSummary = summarizeRMiniChecks(currentRMiniFeedback);
   const hasGuideVideo = Boolean(activeSign.videoSrc);
   const guideTransform =
     guideOrientation === 'mirrored' ? 'scaleX(-1)' : undefined;
   const isVideoUnavailable = guideView === 'video' && !hasGuideVideo;
   const tourVersionCompleted =
-    loading || !profile ? null : profile.playgroundTourVersionCompleted;
+    loading || !profile ? null : profile.playground;
   const autoOpenTour =
     tourVersionCompleted != null &&
     tourVersionCompleted < PLAYGROUND_TOUR_VERSION &&
@@ -107,16 +125,6 @@ export default function PlaygroundPage() {
     'relative z-40 ring-4 ring-amber-400 ring-offset-4 ring-offset-slate-50 border-amber-300 bg-amber-50 shadow-lg shadow-amber-300/60 animate-pulse';
   const controlHighlightClass =
     'relative z-40 ring-4 ring-amber-400 ring-offset-2 ring-offset-white border-amber-300 bg-amber-100 shadow-md shadow-amber-300/60 animate-pulse';
-
-  useEffect(() => {
-    if (loading) return;
-    if (!profile) {
-      router.replace('/login');
-      return;
-    }
-    if (hasCompletedOnboarding(profile)) return;
-    router.replace(`/onboarding?next=${encodeURIComponent('/playground')}`);
-  }, [loading, profile, router]);
 
   useEffect(() => {
     if (guideView !== 'video' || !hasGuideVideo) return;
@@ -225,6 +233,7 @@ export default function PlaygroundPage() {
 
   function resetPracticeView() {
     setCurrentPrediction(null);
+    setCurrentRMiniFeedback(null);
     setGuidePlaying(true);
   }
 
@@ -240,21 +249,39 @@ export default function PlaygroundPage() {
         ? 'border-amber-200 bg-amber-50 text-amber-700'
         : 'border-slate-200 bg-white text-slate-600';
 
-  const feedbackTitle =
-    feedbackState === 'correct'
-      ? 'Correct'
-      : feedbackState === 'incorrect'
-        ? 'Try again'
-        : 'No sign detected';
+  let feedbackTitle: string;
+  let feedbackBody: string;
 
-  const feedbackBody =
-    feedbackState === 'correct'
-      ? `The model currently matches ${activeSign.label}. Keep that handshape steady if you want to reinforce it.`
-      : feedbackState === 'incorrect'
-        ? `The model is reading ${currentPrediction?.letter ?? '--'} instead of ${activeSign.label}. Compare against the guide and try again.`
-        : `Hold the ${activeSign.label} handshape in frame to get live recognition feedback.`;
+  if (feedbackState === 'idle') {
+    feedbackTitle = 'No sign detected';
+    feedbackBody = `Hold the ${activeSign.label} handshape in frame to get live recognition feedback.`;
+  } else if (!isRTarget) {
+    feedbackTitle = feedbackState === 'correct' ? 'Correct' : 'Try again';
+    feedbackBody =
+      feedbackState === 'correct'
+        ? `The model currently matches ${activeSign.label}. Keep that handshape steady if you want to reinforce it.`
+        : `The model is reading ${currentPrediction?.letter ?? '--'} instead of ${activeSign.label}. Compare against the guide and try again.`;
+  } else if (!currentRMiniFeedback || currentRMiniFeedback.status === 'loading') {
+    feedbackTitle = 'Checking R details';
+    feedbackBody = 'Evaluating vertical/cross/tuck/thumb mini checks...';
+  } else if (currentRMiniFeedback.status === 'models_missing') {
+    feedbackTitle = 'R mini model missing';
+    feedbackBody =
+      currentRMiniFeedback.missingChecks.length > 0
+        ? `Missing JS mini model(s): ${currentRMiniFeedback.missingChecks.join(', ')}. Train/export them and place in frontend/sgsl/public/models.`
+        : 'Some JS mini models are missing. Train/export them and place in frontend/sgsl/public/models.';
+  } else if (currentRMiniFeedback.status === 'fail') {
+    feedbackTitle = `Adjust ${currentRMiniFeedback.failingLabel ?? 'R'}`;
+    feedbackBody =
+      currentRMiniFeedback.fix ??
+      'R was detected, but one mini check failed. Compare against the guide and adjust.';
+  } else {
+    feedbackTitle = 'Correct';
+    feedbackBody =
+      'R is detected and all JS mini checks pass at margin ≥ 0.20. Keep the handshape steady.';
+  }
 
-  if (loading || !profile || !hasCompletedOnboarding(profile)) {
+  if (loading || !profile) {
     return (
       <div className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
         <div className="mx-auto max-w-6xl rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
@@ -266,14 +293,7 @@ export default function PlaygroundPage() {
 
   return (
     <>
-      <Script
-        src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
-        strategy="afterInteractive"
-      />
-      <Script
-        src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
-        strategy="afterInteractive"
-      />
+      <MediaPipeScripts />
 
       <div className="min-h-screen bg-slate-50 text-slate-900">
         <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
@@ -363,8 +383,18 @@ export default function PlaygroundPage() {
                   }`}
                 >
                   <StaticLetterPractice
+                    targetLetter={activeSign.letter}
                     onPredictionChange={setCurrentPrediction}
+                    onRMiniFeedbackChange={setCurrentRMiniFeedback}
                     showPredictionPanel={false}
+                    enableRMiniChecks={isRTarget}
+                    disableStaticModel={isRTarget}
+                    rMiniMargin={0.2}
+                    rMiniMarginByCheck={{
+                      cross: 0.5,
+                      thumb: 1.0,
+                      tuck: 0.14,
+                    }}
                   />
                 </div>
               </div>
@@ -408,6 +438,16 @@ export default function PlaygroundPage() {
                         {confidenceLabel}
                       </p>
                     </div>
+                    {isRTarget && (
+                      <div className="rounded-2xl border border-current/15 bg-white/60 p-3 col-span-2">
+                        <p className="uppercase tracking-[0.16em] opacity-70">
+                          R Mini Checks (margin 0.20)
+                        </p>
+                        <p className="mt-2 text-sm font-semibold tracking-wide">
+                          {rMiniChecksSummary}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -418,81 +458,84 @@ export default function PlaygroundPage() {
               className={`rounded-2xl border p-5 ${
                 isTourVisible && currentTourStep.target === 'guide'
                   ? cardHighlightClass
-                  : showGuide
-                    ? 'border-slate-200 bg-white'
-                    : 'border-slate-300 bg-slate-100'
+                  : 'border-slate-200 bg-white'
               }`}
             >
-              {showGuide ? (
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-2">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                      Guide
-                    </p>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <h2 className="text-sm font-semibold text-slate-900">
-                        Reference for sign {activeSign.label}
-                      </h2>
-                      <button
-                        type="button"
-                        onClick={() => setShowGuide(false)}
-                        className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-                      >
-                        Hide guide
-                      </button>
-                    </div>
-                    <p className="text-sm text-slate-500">{activeSign.tip}</p>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                    Guide
+                  </p>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h2 className="text-sm font-semibold text-slate-900">
+                      Reference for sign {activeSign.label}
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => setShowGuide((prev) => !prev)}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                    >
+                      {showGuide ? 'Hide guide' : 'Show guide'}
+                    </button>
                   </div>
+                  <p className="text-sm text-slate-500">{activeSign.tip}</p>
+                </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-[11px]">
-                      <button
-                        type="button"
-                        onClick={() => setGuideView('video')}
-                        className={`rounded-full px-3 py-1 font-semibold ${
-                          guideView === 'video'
-                            ? 'bg-white text-slate-900'
-                            : 'text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        Video
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setGuideView('image')}
-                        className={`rounded-full px-3 py-1 font-semibold ${
-                          guideView === 'image'
-                            ? 'bg-white text-slate-900'
-                            : 'text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        Image
-                      </button>
-                    </div>
+                <GuideVisibilityMask
+                  hidden={!showGuide}
+                  description={`Reveal the guide whenever you want the reference image or video for sign ${activeSign.label}.`}
+                >
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setGuideView('video')}
+                          className={`rounded-full px-3 py-1 font-semibold ${
+                            guideView === 'video'
+                              ? 'bg-white text-slate-900'
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          Video
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGuideView('image')}
+                          className={`rounded-full px-3 py-1 font-semibold ${
+                            guideView === 'image'
+                              ? 'bg-white text-slate-900'
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          Image
+                        </button>
+                      </div>
 
-                    <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-[11px]">
-                      <button
-                        type="button"
-                        onClick={() => setGuideOrientation('normal')}
-                        className={`rounded-full px-3 py-1 font-semibold ${
-                          guideOrientation === 'normal'
-                            ? 'bg-white text-slate-900'
-                            : 'text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        Normal
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setGuideOrientation('mirrored')}
-                        className={`rounded-full px-3 py-1 font-semibold ${
-                          guideOrientation === 'mirrored'
-                            ? 'bg-white text-slate-900'
-                            : 'text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        Mirrored
-                      </button>
+                      <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setGuideOrientation('normal')}
+                          className={`rounded-full px-3 py-1 font-semibold ${
+                            guideOrientation === 'normal'
+                              ? 'bg-white text-slate-900'
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          Normal
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGuideOrientation('mirrored')}
+                          className={`rounded-full px-3 py-1 font-semibold ${
+                            guideOrientation === 'mirrored'
+                              ? 'bg-white text-slate-900'
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          Mirrored
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -564,25 +607,8 @@ export default function PlaygroundPage() {
                     Use mirrored mode if you want the guide to match your selfie
                     camera view more directly.
                   </p>
-                </div>
-              ) : (
-                <div className="flex min-h-[520px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-200/70 px-6 py-8 text-center">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                    Guide hidden
-                  </p>
-                  <p className="mt-3 max-w-xs text-sm text-slate-600">
-                    Show the guide again whenever you want the reference image
-                    or video for sign {activeSign.label}.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowGuide(true)}
-                    className="mt-6 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  >
-                    Show guide
-                  </button>
-                </div>
-              )}
+                </GuideVisibilityMask>
+              </div>
             </aside>
           </section>
         </main>

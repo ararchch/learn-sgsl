@@ -1,0 +1,20 @@
+Feature: tuck
+Dataset: data/samples_r_tuck_js.csv
+Model: linear svm
+
+Classes:
+["absent", "present"]
+
+Classification report:
+              precision    recall  f1-score   support
+
+      absent     1.0000    1.0000    1.0000       929
+     present     1.0000    1.0000    1.0000      1167
+
+    accuracy                         1.0000      2096
+   macro avg     1.0000    1.0000    1.0000      2096
+weighted avg     1.0000    1.0000    1.0000      2096
+
+Confusion matrix:
+929 0
+0 1167

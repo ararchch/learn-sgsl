@@ -1,0 +1,20 @@
+Feature: vertical
+Dataset: data/samples_r_vertical_js.csv
+Model: linear svm
+
+Classes:
+["absent", "present"]
+
+Classification report:
+              precision    recall  f1-score   support
+
+      absent     1.0000    1.0000    1.0000       612
+     present     1.0000    1.0000    1.0000       821
+
+    accuracy                         1.0000      1433
+   macro avg     1.0000    1.0000    1.0000      1433
+weighted avg     1.0000    1.0000    1.0000      1433
+
+Confusion matrix:
+612 0
+0 821
