@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import DynamicSignPractice from '@/components/DynamicSignPractice';
 import GuideVisibilityMask from '@/components/GuideVisibilityMask';
+import LessonCompletionModal from '@/components/LessonCompletionModal';
 import ModuleNav from '@/components/ModuleNav';
 import { useUserProgress } from '@/hooks/useUserProgress';
 
@@ -84,6 +86,11 @@ function wordGifSrc(word: ModuleThreeWord) {
 
 export default function ModuleThreePage() {
   const [currentLessonId, setCurrentLessonId] = useState<string>(lessons[0].id);
+  const [lessonRunKey, setLessonRunKey] = useState(0);
+  const [suppressedLessonId, setSuppressedLessonId] = useState<string | null>(
+    null,
+  );
+  const router = useRouter();
   const { profile, completeLesson } = useUserProgress();
   const completedLessons = profile?.completedLessons ?? [];
 
@@ -101,9 +108,47 @@ export default function ModuleThreePage() {
     const index = lessons.findIndex((lesson) => lesson.id === currentLesson.id);
     return index >= 0 ? lessons[index + 1]?.id ?? null : null;
   }, [currentLesson.id]);
+  const completionModalOpen =
+    isCompleted && suppressedLessonId !== currentLesson.id;
+
+  const repeatLabel =
+    currentLesson.type === 'practice'
+      ? 'Repeat current practice'
+      : currentLesson.type === 'testing'
+        ? 'Repeat current test'
+        : 'Repeat current lesson';
+  const isFinalLesson = currentLesson.id === 'final-test';
+  const completionTitle = isFinalLesson
+    ? 'Course complete'
+    : `${currentLesson.title} complete`;
+  const completionMessage = isFinalLesson
+    ? 'Thank you for completing the course. You can repeat this final test or return home.'
+    : 'You can repeat this step or continue to the next one.';
+  const moveOnLabel = isFinalLesson ? 'Go to Home' : 'Move on to next';
 
   function markLessonComplete() {
     completeLesson(`module3-${currentLesson.id}`, 50);
+  }
+
+  function openLesson(lessonId: string) {
+    setSuppressedLessonId(null);
+    setCurrentLessonId(lessonId);
+  }
+
+  function handleRepeatCurrent() {
+    setSuppressedLessonId(currentLesson.id);
+    setLessonRunKey((prev) => prev + 1);
+  }
+
+  function handleMoveOn() {
+    setSuppressedLessonId(null);
+    if (nextLessonId) {
+      openLesson(nextLessonId);
+      return;
+    }
+    if (isFinalLesson) {
+      router.push('/');
+    }
   }
 
   return (
@@ -160,7 +205,7 @@ export default function ModuleThreePage() {
             return (
               <button
                 key={lesson.id}
-                onClick={() => setCurrentLessonId(lesson.id)}
+                onClick={() => openLesson(lesson.id)}
                 className={`w-full text-left rounded-xl px-3 py-2.5 text-xs mb-1 flex items-start gap-3 border ${
                   active
                     ? 'bg-white border-blue-500/70'
@@ -215,7 +260,7 @@ export default function ModuleThreePage() {
         <section className="flex-1 overflow-y-auto p-4 md:p-6">
           {currentLesson.id === 'intro' && (
             <IntroLessonContent
-              key={currentLesson.id}
+              key={`${currentLesson.id}-${lessonRunKey}`}
               onComplete={markLessonComplete}
               isCompleted={isCompleted}
             />
@@ -223,7 +268,7 @@ export default function ModuleThreePage() {
 
           {currentLesson.id === 'learn' && (
             <LearnLessonContent
-              key={currentLesson.id}
+              key={`${currentLesson.id}-${lessonRunKey}`}
               onComplete={markLessonComplete}
               isCompleted={isCompleted}
             />
@@ -231,7 +276,7 @@ export default function ModuleThreePage() {
 
           {currentLesson.id === 'guided-practice' && (
             <GuidedPracticeContent
-              key={currentLesson.id}
+              key={`${currentLesson.id}-${lessonRunKey}`}
               onComplete={markLessonComplete}
               isCompleted={isCompleted}
             />
@@ -239,7 +284,7 @@ export default function ModuleThreePage() {
 
           {currentLesson.id === 'mixed-practice' && (
             <MixedPracticeContent
-              key={currentLesson.id}
+              key={`${currentLesson.id}-${lessonRunKey}`}
               onComplete={markLessonComplete}
               isCompleted={isCompleted}
             />
@@ -247,7 +292,7 @@ export default function ModuleThreePage() {
 
           {currentLesson.id === 'final-test' && (
             <FinalTestContent
-              key={currentLesson.id}
+              key={`${currentLesson.id}-${lessonRunKey}`}
               onComplete={markLessonComplete}
               isCompleted={isCompleted}
             />
@@ -256,20 +301,15 @@ export default function ModuleThreePage() {
       </main>
       </div>
 
-      {isCompleted && nextLessonId && (
-        <div className="fixed bottom-4 left-0 right-0 flex justify-center animate-in slide-in-from-bottom">
-          <div className="flex items-center gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-lg">
-            <span className="font-semibold">Lesson Complete! +50 XP</span>
-            <button
-              type="button"
-              onClick={() => setCurrentLessonId(nextLessonId)}
-              className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-400"
-            >
-              Continue to next lesson →
-            </button>
-          </div>
-        </div>
-      )}
+      <LessonCompletionModal
+        open={completionModalOpen}
+        title={completionTitle}
+        message={completionMessage}
+        repeatLabel={repeatLabel}
+        moveOnLabel={moveOnLabel}
+        onRepeat={handleRepeatCurrent}
+        onMoveOn={handleMoveOn}
+      />
     </>
   );
 }

@@ -244,7 +244,7 @@ export default function Module2IntroLessonView({
         <div className="border-t border-slate-200 bg-white px-6 py-4">
           <p className="text-[11px] text-slate-500">
             {reachedEnd
-              ? 'Nice — lesson complete. Use the “Continue to next lesson” banner to proceed.'
+              ? 'Nice — lesson complete. Use the completion modal to repeat this lesson or move on.'
               : 'Tip: Scroll to the end to complete this intro.'}
           </p>
         </div>
